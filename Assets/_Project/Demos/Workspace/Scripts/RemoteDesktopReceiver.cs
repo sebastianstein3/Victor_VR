@@ -26,12 +26,14 @@ namespace CardboardXR.Demos.Workspace
     {
         public const int k_DefaultPort = 8765;
         public const string k_HostFileName = "pulpit.txt";
+        const string k_TokenHeader = "X-CXR-Token";
         const float k_RetrySeconds = 2f;
         const int k_TimeoutSeconds = 3;
 
         string m_HostAddress;
         int m_Port = k_DefaultPort;
         string m_App; // one app's window instead of the whole screen (stream_server.py ?app=)
+        string m_Token; // stream_server.py's access token (X-CXR-Token), from pulpit.txt
         bool m_IsConnected;
 
         RectTransform m_DisplayRect;
@@ -91,8 +93,8 @@ namespace CardboardXR.Demos.Workspace
                 if (!File.Exists(HostFile))
                 {
                     File.WriteAllText(HostFile,
-                        "# Adres komputera z uruchomionym VisionPro/pc_stream/stream_server.py, np.:\n" +
-                        "# 192.168.1.20\n# albo z portem: 192.168.1.20:8765\n");
+                        "# Adres i token komputera z uruchomionym VisionPro/pc_stream/stream_server.py\n" +
+                        "# (serwer wypisuje tę linię przy starcie), np.:\n# 192.168.1.20:8765 AbCdEf123456\n");
                     return null;
                 }
                 foreach (var raw in File.ReadAllLines(HostFile))
@@ -109,16 +111,24 @@ namespace CardboardXR.Demos.Workspace
             return null;
         }
 
-        void ParseHost(string text) => TryParseHost(text, out m_HostAddress, out m_Port);
+        void ParseHost(string text) => TryParseHost(text, out m_HostAddress, out m_Port, out m_Token);
 
-        // "ip" or "ip:port" -> host and port (k_DefaultPort when not given); false for an empty text.
-        public static bool TryParseHost(string text, out string host, out int port)
+        // "ip", "ip:port" or "ip:port token" -> host, port (k_DefaultPort when not given) and token
+        // (null when not given); false for an empty text.
+        public static bool TryParseHost(string text, out string host, out int port, out string token)
         {
             host = null;
             port = k_DefaultPort;
+            token = null;
             if (string.IsNullOrWhiteSpace(text))
                 return false;
             text = text.Trim();
+            int space = text.IndexOfAny(new[] { ' ', '\t' });
+            if (space > 0)
+            {
+                token = text.Substring(space + 1).Trim();
+                text = text.Substring(0, space);
+            }
             int colon = text.LastIndexOf(':');
             if (colon > 0 && int.TryParse(text.Substring(colon + 1), out var parsed) && parsed > 0 && parsed < 65536)
             {
@@ -151,7 +161,7 @@ namespace CardboardXR.Demos.Workspace
         // The names of the apps with a visible window on the computer in Documents/pulpit.txt.
         public static IEnumerator FetchApps(Action<List<string>> done, Action<string> failed)
         {
-            if (!TryParseHost(ReadHostFile(), out var host, out var port))
+            if (!TryParseHost(ReadHostFile(), out var host, out var port, out var token))
             {
                 failed?.Invoke($"Wpisz IP komputera do Documents/{k_HostFileName}");
                 yield break;
@@ -159,7 +169,14 @@ namespace CardboardXR.Demos.Workspace
             using (var request = UnityWebRequest.Get($"http://{host}:{port}/windows"))
             {
                 request.timeout = k_TimeoutSeconds;
+                if (!string.IsNullOrEmpty(token))
+                    request.SetRequestHeader(k_TokenHeader, token);
                 yield return request.SendWebRequest();
+                if (request.responseCode == 401)
+                {
+                    failed?.Invoke("Zły lub brak tokenu: wpisz do pulpit.txt całą linię wypisaną przez serwer");
+                    yield break;
+                }
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     failed?.Invoke($"Brak połączenia z {host} (czy stream_server.py działa?)");
@@ -189,12 +206,15 @@ namespace CardboardXR.Demos.Workspace
             {
                 bool ok;
                 string error;
+                long code;
                 using (var request = UnityWebRequest.Get(FrameUrl))
                 {
                     request.timeout = k_TimeoutSeconds;
+                    AddToken(request);
                     yield return request.SendWebRequest();
                     ok = request.result == UnityWebRequest.Result.Success && ShowFrame(request.downloadHandler.data);
                     error = request.error;
+                    code = request.responseCode;
                 }
 
                 if (ok)
@@ -211,6 +231,12 @@ namespace CardboardXR.Demos.Workspace
                     Debug.LogWarning($"[RemoteDesktop] {FrameUrl}: {error}");
                 warned = true;
                 m_IsConnected = false;
+                if (code == 401)
+                {
+                    SetStatus("Zły lub brak tokenu: wpisz do pulpit.txt całą linię wypisaną przez serwer");
+                    yield return new WaitForSecondsRealtime(k_RetrySeconds);
+                    continue;
+                }
                 SetStatus(m_App != null
                     ? $"Brak okna {m_App} na {m_HostAddress} (zamknięte, zminimalizowane lub brak połączenia)"
                     : $"Brak połączenia z {m_HostAddress}:{m_Port} (czy stream_server.py działa?)");
@@ -311,11 +337,18 @@ namespace CardboardXR.Demos.Workspace
                 request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
+                AddToken(request);
                 request.timeout = k_TimeoutSeconds;
                 yield return request.SendWebRequest();
                 if (request.responseCode == 403)
                     SetStatus("PC tylko podgląd: uruchom stream_server.py z --allow-input");
             }
+        }
+
+        void AddToken(UnityWebRequest request)
+        {
+            if (!string.IsNullOrEmpty(m_Token))
+                request.SetRequestHeader(k_TokenHeader, m_Token);
         }
 
         static string F(float value) => value.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);

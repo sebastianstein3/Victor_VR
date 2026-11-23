@@ -445,6 +445,8 @@ namespace CardboardXR.Demos.Workspace
             public string text;
             public bool pc;
             public string app; // with pc: one app's window on the computer
+            public bool browser;
+            public string url; // with browser: the page
             public int slot;
             public float size = 1f;
             public bool pinned;
@@ -472,9 +474,11 @@ namespace CardboardXR.Demos.Workspace
                 saved.screens.Add(new SavedScreen
                 {
                     title = screen.Title,
-                    text = screen.IsRemoteDesktop ? "" : screen.Text,
+                    text = screen.IsRemoteDesktop || screen.IsBrowser ? "" : screen.Text,
                     pc = screen.IsRemoteDesktop,
                     app = screen.RemoteApp,
+                    browser = screen.IsBrowser,
+                    url = screen.IsBrowser ? screen.Browser.Url : null,
                     slot = m_ScreenSlots.TryGetValue(screen, out var slot) ? slot : -1,
                     size = screen.Size,
                     pinned = screen.Pinned,
@@ -512,7 +516,9 @@ namespace CardboardXR.Demos.Workspace
                 var screen = CreateNewScreen(string.IsNullOrEmpty(item.title) ? "Ekran" : item.title, item.slot);
                 if (screen == null)
                     continue;
-                if (item.pc)
+                if (item.browser)
+                    screen.EnableBrowser(string.IsNullOrEmpty(item.url) ? null : item.url);
+                else if (item.pc)
                     screen.EnableRemoteDesktop(null, string.IsNullOrEmpty(item.app) ? null : item.app);
                 else
                     screen.SetText(item.text);
@@ -553,6 +559,14 @@ namespace CardboardXR.Demos.Workspace
             var screen = CreateNewScreen("Samouczek");
             if (screen != null)
                 screen.gameObject.AddComponent<TutorialPanel>().Initialize(screen, screen.Rect);
+        }
+
+        // A web browser window running on the iPhone itself (BrowserView)
+        public void CreateBrowserScreen(string url = null)
+        {
+            var screen = CreateNewScreen("Przeglądarka");
+            if (screen != null)
+                screen.EnableBrowser(url);
         }
 
         // A screen that lists the computer's apps; the one picked becomes this screen (AppPicker)
@@ -707,6 +721,17 @@ namespace CardboardXR.Demos.Workspace
                 case "pomoc": case "samouczek": case "help": case "tutorial":
                     OpenTutorial();
                     break;
+                case "przeglądarka": case "internet": case "browser":
+                    CreateBrowserScreen();
+                    break;
+                case "wstecz": case "back":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.GoBack();
+                    break;
+                case "odśwież": case "reload":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.DoReload();
+                    break;
                 case "aplikacje": case "aplikacja": case "apps":
                     CreateAppScreen();
                     break;
@@ -819,6 +844,12 @@ namespace CardboardXR.Demos.Workspace
             {
                 SelectPrevScreen();
                 Debug.Log("[Workspace] Gest: SwipeLeft -> Poprzedni ekran");
+            }
+            else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
+                     m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+            {
+                // Hand up = page moves up = read further down
+                m_ActiveScreen.Browser.Scroll(gesture == DynamicGesture.SwipeUp ? 0.7f : -0.7f);
             }
             else if (gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown)
             {
@@ -993,6 +1024,9 @@ namespace CardboardXR.Demos.Workspace
                     m_ActiveScreen.MoveCursorDelta(delta * 0.8f);
                 if (mouse.leftButton.wasPressedThisFrame)
                     m_ActiveScreen.ClickAtCursor();
+                float wheel = mouse.scroll.ReadValue().y;
+                if (Mathf.Abs(wheel) > 0.01f && m_ActiveScreen.IsBrowser)
+                    m_ActiveScreen.Browser.Scroll(-Mathf.Sign(wheel) * 0.25f);
                 if (mouse.rightButton.wasPressedThisFrame)
                     m_ActiveScreen.ContextClickAtCursor();
             }

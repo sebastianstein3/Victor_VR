@@ -21,13 +21,23 @@ Setup:
 Then put this computer's address (printed below) in the iPhone's Documents/pulpit.txt
 (Files app > CardboardXR > pulpit.txt) and open a "PC" window in the Workspace.
 
-Security: anyone on the same Wi-Fi can see the screen, and with --allow-input also control it.
-Use it on your own home network only, and stop it (Ctrl+C) when you're done.
+Security:
+- Every request must carry the access token (header X-CXR-Token). It is made once, saved in
+  ~/.cardboardxr_stream_token (only your user can read it) and printed at start; put it after the
+  address in pulpit.txt. Without it nobody else on the Wi-Fi can see or control this computer.
+  --new-token makes a new one (the old one stops working).
+- The token travels unencrypted on the local network (plain HTTP, like the frames): use your own
+  home network, not public Wi-Fi. Stop the server (Ctrl+C) when you're done.
+- --allow-input only: clicks are limited to the shared window or screen, keys to a short list, and an
+  app is brought to the front only if it is one of the visible windows.
 macOS: allow Screen Recording (and Accessibility for --allow-input) for your terminal in
 System Settings > Privacy & Security.
 """
 import argparse
+import hmac
 import io
+import os
+import secrets
 import json
 import socket
 import sys
@@ -41,6 +51,22 @@ except ImportError:
     sys.exit("Brak bibliotek: pip install mss pillow")
 
 ARGS = None
+TOKEN = None
+TOKEN_FILE = os.path.join(os.path.expanduser("~"), ".cardboardxr_stream_token")
+
+
+def load_token(renew):
+    """The saved access token, or a new one (saved readable by this user only)."""
+    if not renew and os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, encoding="utf-8") as f:
+            token = f.read().strip()
+        if len(token) >= 12:
+            return token
+    token = secrets.token_urlsafe(12)  # ~96 bits
+    descriptor = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as f:
+        f.write(token)
+    return token
 _capture_lock = threading.Lock()
 _local = threading.local()
 
@@ -118,10 +144,13 @@ def monitor_size():
 
 def activate(app):
     """Brings the app to the front, so the keys typed in the headset reach it."""
+    if app not in {window["app"] for window in list_windows()}:
+        raise LookupError(f"no visible window of {app}")
     if sys.platform == "darwin":
         import subprocess
-        subprocess.run(["osascript", "-e", f'tell application "{app.replace(chr(34), "")}" to activate'],
-                       check=False, capture_output=True, timeout=3)
+        # The name goes in as an argument (argv), never into the script's text: no AppleScript injection
+        subprocess.run(["osascript", "-e", "on run argv", "-e", "tell application (item 1 of argv) to activate",
+                        "-e", "end run", app], check=False, capture_output=True, timeout=3)
     elif sys.platform == "win32":
         import pygetwindow
         for window in pygetwindow.getWindowsWithTitle(app):
@@ -141,11 +170,13 @@ def handle_input(event):
         activate(app)  # clicks and typing go to that app
     if kind in ("click", "rightclick"):
         region = find_region(app)
-        x = region["left"] + float(event["x"]) * region["width"]
-        y = region["top"] + float(event["y"]) * region["height"]
+        u = min(max(float(event["x"]), 0.0), 1.0)  # never outside the shared window/screen
+        v = min(max(float(event["y"]), 0.0), 1.0)
+        x = region["left"] + u * region["width"]
+        y = region["top"] + v * region["height"]
         pyautogui.click(x, y, button="right" if kind == "rightclick" else "left")
     elif kind == "text":
-        text = str(event.get("text", ""))
+        text = str(event.get("text", ""))[:2000]
         if text.isascii():
             pyautogui.write(text)
         else:  # Polish letters etc.: paste through the clipboard
@@ -159,7 +190,16 @@ def handle_input(event):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def authorized(self):
+        given = self.headers.get("X-CXR-Token", "")
+        if hmac.compare_digest(given.encode("utf-8"), TOKEN.encode("utf-8")):
+            return True
+        self.send_error(401, "missing or wrong token (see the server's output)")
+        return False
+
     def do_GET(self):
+        if not self.authorized():
+            return
         from urllib.parse import parse_qs, urlparse
         url = urlparse(self.path)
         if url.path == "/windows":
@@ -191,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
+        if not self.authorized():
+            return
         if self.path != "/input":
             self.send_error(404)
             return
@@ -228,12 +270,15 @@ def main():
     parser.add_argument("--width", type=int, default=1280, help="max frame width in pixels (default 1280)")
     parser.add_argument("--quality", type=int, default=60, help="JPEG quality 1-95 (default 60)")
     parser.add_argument("--allow-input", action="store_true", help="let the headset click and type here")
+    parser.add_argument("--new-token", action="store_true", help="make a new access token (the old one stops working)")
     ARGS = parser.parse_args()
+    global TOKEN
+    TOKEN = load_token(ARGS.new_token)
 
     address = local_address()
     server = ThreadingHTTPServer(("0.0.0.0", ARGS.port), Handler)
     print(f"Ekran tego komputera: http://{address}:{ARGS.port}/frame.jpg")
-    print(f"Wpisz do iPhone'a, plik Documents/pulpit.txt:  {address}:{ARGS.port}")
+    print(f"Wpisz do iPhone'a, plik Documents/pulpit.txt (jedna linia):  {address}:{ARGS.port} {TOKEN}")
     print("Sterowanie z gogli: " + ("WŁĄCZONE (każdy w tej sieci Wi-Fi może klikać!)" if ARGS.allow_input else "wyłączone (tylko podgląd)"))
     print("Zatrzymanie: Ctrl+C")
     try:

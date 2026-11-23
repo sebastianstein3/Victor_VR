@@ -39,18 +39,20 @@ Wi-Fi dla wszystkich urządzeń. Do ekranu iPada: iPad z tym samym Apple ID co M
    python3 stream_server.py --allow-input
    ```
    Bez `--allow-input` gogle tylko oglądają, nie mogą klikać ani pisać.
-2. Terminal wypisze adres, np.:
+2. Terminal wypisze linię z adresem i **tokenem** (hasłem dostępu), np.:
    ```
-   Wpisz do iPhone'a, plik Documents/pulpit.txt:  192.168.1.20:8765
+   Wpisz do iPhone'a, plik Documents/pulpit.txt (jedna linia):  192.168.1.20:8765 AbCdEf123456
    ```
-   Zapisz ten adres. Terminal zostaw otwarty: dopóki działa, gogle widzą ekran.
+   Zapisz całą linię. Token jest stały (zapisany na Macu), więc wpisujesz go raz. Bez niego nikt
+   inny w sieci Wi-Fi nie zobaczy ekranu. Nowy token: `--new-token`. Terminal zostaw otwarty.
 
 ## Krok 3. Wpisz adres Maca do iPhone'a (raz)
 
 1. Na iPhonie otwórz CardboardXR, wejdź do **Spatial Workspace** i stuknij w docku **PC**. Aplikacja
    utworzy wtedy plik `pulpit.txt`. Za pierwszym razem pokaże komunikat, że brakuje adresu.
 2. Otwórz aplikację **Pliki** → **Na moim iPhonie** → **CardboardXR** → **pulpit.txt**.
-3. W pierwszej pustej linii wpisz adres z kroku 2, np. `192.168.1.20:8765`, i zapisz.
+3. W pierwszej pustej linii wpisz **całą linię** z kroku 2 (adres, spacja, token), np.
+   `192.168.1.20:8765 AbCdEf123456`, i zapisz.
    Możesz to też zrobić na Macu: Finder → iPhone → karta **Pliki** → CardboardXR.
 
 ## Krok 4. Cały ekran Maca w goglach
@@ -83,6 +85,19 @@ Wi-Fi dla wszystkich urządzeń. Do ekranu iPada: iPad z tym samym Apple ID co M
 
 ---
 
+## Przeglądarka w goglach (bez komputera)
+
+W docku **Aplikacje** → **Przeglądarka (iPhone)** albo powiedz „przeglądarka”. To silnik Safari
+działający na iPhonie, wyświetlany jako okno w VR.
+
+- Klik: spójrz na stronę i uszczypnij (albo gładzik / mysz).
+- Adres: przycisk **Adres** pod oknem → pisz → **Enter**. Słowa bez kropki szukają w DuckDuckGo.
+- Pisanie i dyktowanie trafiają do pola, w które kliknąłeś na stronie.
+- Przewijanie: machnięcie otwartą dłonią w górę/dół albo kółko myszy. Głosem: „wstecz”, „odśwież”.
+- Bezpieczeństwo: tylko strony https (http tylko w sieci domowej); inne rodzaje adresów
+  (pliki, skrypty, telefon, aplikacje) są blokowane; strony nie mogą otwierać okien ani pobierać plików.
+- Ok. 10 klatek na sekundę – do czytania i pisania, nie do filmów.
+
 ## Sterowanie w goglach
 
 | Co | Jak |
@@ -99,6 +114,7 @@ Wi-Fi dla wszystkich urządzeń. Do ekranu iPada: iPad z tym samym Apple ID co M
 
 | Objaw | Co zrobić |
 |---|---|
+| „Zły lub brak tokenu” | Wpisz do `pulpit.txt` całą linię z serwera (adres i token po spacji) |
 | „Wpisz IP komputera do Documents/pulpit.txt” | Krok 3: adres nie jest wpisany albo jest w linii zaczynającej się od `#` |
 | „Brak połączenia z …” | Czy Terminal z serwerem jest otwarty? Czy iPhone i Mac są w tej samej sieci Wi-Fi? Czy pozwoliłeś na dostęp do sieci lokalnej (iPhone: Ustawienia → Prywatność → Sieć lokalna → CardboardXR)? |
 | Czarny obraz | Brak uprawnienia **Nagrywanie ekranu** dla Terminala (krok 1.3) |
@@ -110,8 +126,9 @@ Wi-Fi dla wszystkich urządzeń. Do ekranu iPada: iPad z tym samym Apple ID co M
 
 ## Bezpieczeństwo
 
-- Każdy w Twojej sieci Wi-Fi może podglądać ekran Maca, gdy serwer działa, a z `--allow-input` także
-  nim sterować. Używaj tylko w domowej sieci.
+- Dostęp chroni token: bez niego serwer odmawia (błąd 401). Token i obraz idą jednak w sieci
+  lokalnej bez szyfrowania, więc używaj tylko domowej sieci Wi-Fi, nie publicznej.
+- `pulpit.txt` z tokenem leży w plikach aplikacji na iPhonie (widocznych w Finderze i aplikacji Pliki).
 - Po skończeniu zatrzymaj serwer w Terminalu klawiszami **Ctrl + C**.
 - Awaryjne zatrzymanie sterowania: przesuń prawdziwą mysz Maca w róg ekranu.
 

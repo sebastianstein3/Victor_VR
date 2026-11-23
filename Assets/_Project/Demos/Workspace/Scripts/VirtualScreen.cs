@@ -214,6 +214,31 @@ namespace CardboardXR.Demos.Workspace
         }
 
         public static Vector2 BodyCenter => new(0f, k_BodyY);
+        public static float FooterY => k_FooterY;
+
+        // ---- Browser ----
+        BrowserView m_Browser;
+        public bool IsBrowser => m_Browser != null;
+        public BrowserView Browser => m_Browser;
+
+        public void EnableBrowser(string url = null)
+        {
+            if (m_Browser != null)
+                return;
+            SetTitle("Przeglądarka");
+            m_Browser = gameObject.AddComponent<BrowserView>();
+            m_Browser.Initialize(this, m_CanvasRect, m_Head, url);
+        }
+
+        // The character counter and Clear (a browser or PC window uses the footer for its own buttons)
+        public void ShowFooterStats(bool show)
+        {
+            if (m_FooterText != null)
+                m_FooterText.gameObject.SetActive(show);
+            var clear = m_CanvasRect.Find("ClearBtn");
+            if (clear != null)
+                clear.gameObject.SetActive(show);
+        }
         public static Vector2 BodySize => new(k_DefaultWidth - 60f, k_BodyHeight);
 
         // ---- Pointer: the cursor (moved by the desk trackpad or a mouse) can click this window's buttons ----
@@ -222,6 +247,8 @@ namespace CardboardXR.Demos.Workspace
         public bool ClickAtCursor()
         {
             Focused?.Invoke(this);
+            if (m_Browser != null && CursorInsideBody())
+                return m_Browser.ClickAt(m_CursorPos);
             if (m_Remote != null && CursorInsideBody())
                 return m_Remote.Click(m_CursorPos);
             foreach (var button in GetComponentsInChildren<M3Button>(false))
@@ -274,6 +301,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void AppendChar(char c)
         {
+            if (m_Browser != null) { m_Browser.TypeText(c.ToString()); Focused?.Invoke(this); return; }
             if (m_Remote != null) { m_Remote.SendText(c.ToString()); Focused?.Invoke(this); return; }
             m_Content += c;
             UpdateContentDisplay();
@@ -282,6 +310,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void AppendText(string str)
         {
+            if (m_Browser != null) { m_Browser.TypeText(str); Focused?.Invoke(this); return; }
             if (m_Remote != null) { m_Remote.SendText(str); Focused?.Invoke(this); return; }
             if (!string.IsNullOrEmpty(str))
             {
@@ -293,6 +322,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void Backspace()
         {
+            if (m_Browser != null) { m_Browser.Backspace(); Focused?.Invoke(this); return; }
             if (m_Remote != null) { m_Remote.SendKey("Backspace"); Focused?.Invoke(this); return; }
             if (m_Content.Length > 0)
             {
@@ -311,6 +341,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void AppendNewline()
         {
+            if (m_Browser != null) { m_Browser.Enter(); Focused?.Invoke(this); return; }
             if (m_Remote != null) { m_Remote.SendKey("Enter"); Focused?.Invoke(this); return; }
             m_Content += "\n";
             UpdateContentDisplay();

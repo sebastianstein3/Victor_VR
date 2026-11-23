@@ -13,6 +13,8 @@ namespace CardboardXR.Demos.Workspace
     // screen, and the phone's only screen is busy with the headset.
     public class AppPicker : MonoBehaviour
     {
+        // Always first in the list: a web browser running on the iPhone itself (BrowserView)
+        public const string k_BrowserEntry = "Przeglądarka (iPhone)";
         const int k_Columns = 2;
         const int k_Rows = 3;
         const float k_ButtonWidth = 222f;
@@ -40,15 +42,19 @@ namespace CardboardXR.Demos.Workspace
             yield return RemoteDesktopReceiver.FetchApps(apps =>
             {
                 m_Apps.Clear();
+                m_Apps.Add(k_BrowserEntry);
                 m_Apps.AddRange(apps);
                 m_Page = 0;
-                if (m_Apps.Count == 0)
+                if (m_Apps.Count <= 1)
                     m_Status.text = "Brak widocznych okien. Otwórz aplikacje na komputerze (obok siebie, nie zminimalizowane) i odśwież.";
                 else
                     m_Status.gameObject.SetActive(false);
                 ShowPage();
             }, error =>
             {
+                // No computer: the iPhone's own browser is still offered
+                m_Apps.Clear();
+                m_Apps.Add(k_BrowserEntry);
                 m_Status.text = "<noparse>" + error + "</noparse>";
                 ShowPage();
             });
@@ -94,6 +100,12 @@ namespace CardboardXR.Demos.Workspace
         {
             Destroy(m_Group.gameObject);
             Destroy(m_Status.gameObject);
+            if (app == k_BrowserEntry)
+            {
+                m_Screen.EnableBrowser();
+                Destroy(this);
+                return;
+            }
             m_Screen.SetTitle(app);
             m_Screen.EnableRemoteDesktop(null, app);
             Destroy(this);
