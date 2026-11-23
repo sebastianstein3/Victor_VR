@@ -55,6 +55,13 @@ namespace CardboardXR.Demos.Workspace
             "Skala całego okna: <b>-</b> / <b>+</b> (do 2x).\n" +
             "<b>Wyśrodkuj</b> ustawia wszystko przed Tobą.",
 
+            "<b>Więcej: narzędzia</b>\n\n" +
+            "Przycisk <b>Więcej</b> w docku: napisy na żywo, zegar, minutnik, notatka, pogoda, kalendarz, czytnik PDF, " +
+            "środowiska 360, modele 3D, zdjęcia 3D.\n" +
+            "Pliki wgraj przez Finder (iPhone > Pliki) do folderów: <b>PDF</b>, <b>Srodowiska</b>, " +
+            "<b>Modele</b>, <b>Przestrzenne</b>.\n" +
+            "Głos: napisy, pdf, środowisko, pokój, modele, zdjęcia 3d.",
+
             "<b>Gdy coś nie działa</b>\n\n" +
             "Brak połączenia: czy serwer działa i ta sama sieć Wi-Fi?\n" +
             "Czarny obraz: Nagrywanie ekranu dla Terminala.\n" +

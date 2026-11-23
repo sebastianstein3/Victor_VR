@@ -123,6 +123,27 @@ działający na iPhonie, wyświetlany jako okno w VR.
 | Rozmiar tekstu strony (przeglądarka) | **Aa** pod oknem albo „większy tekst” / „mniejszy tekst” |
 | Wszystko przed siebie | **Wyśrodkuj** w docku |
 
+## Narzędzia z menu Więcej
+
+Przycisk **Więcej** w docku (albo głos „więcej”) otwiera menu: Napisy na żywo, Zegar, Minutnik, Notatka,
+Pogoda, Kalendarz, Czytnik PDF, Środowisko, Modele 3D, Zdjęcia 3D, Samouczek.
+
+| Narzędzie | Co robi | Pliki i głos |
+|---|---|---|
+| Napisy na żywo | Napisy z mowy i tłumaczenie pl↔en (zgodnie z językiem przycisku **PL**). Wymaga iOS 26.4+ i pobranych języków w Ustawieniach iOS | „napisy” |
+| Zegar, Minutnik | Małe panele, zostają tam, gdzie je odłożysz | „zegar”, „minutnik” |
+| Notatka | Notatka dyktowana głosem lub z klawiatury | „notatka” |
+| Pogoda | Open-Meteo; miasto w pliku `pogoda.txt` (domyślnie Warszawa) | „pogoda” |
+| Kalendarz | Wydarzenia z kalendarza iPhone'a (zezwól na dostęp do kalendarza) | „kalendarz” |
+| Czytnik PDF | Strony: przyciski w stopce, gest otwartej dłoni góra/dół, „następna strona” / „poprzednia strona”. Rozciągnięte okno renderuje się ostrzej | folder `PDF` (albo `Documents`), „pdf” |
+| Środowisko | Zmierzch, Noc, Ocean, Kosmos albo własne zdjęcie 360 (.jpg/.png equirectangular) lub wideo 360 (.mp4/.mov). Kamera przezroczysta jest wtedy wyłączona | folder `Srodowiska`; „środowisko”, „pokój” wyłącza |
+| Modele 3D | .glb/.gltf stawiane na prawdziwej powierzchni, na którą patrzysz; panel -30° / +30° / - / + obraca i skaluje. Wymaga pakietu `com.unity.cloud.gltfast` w buildzie | folder `Modele`; „modele” |
+| Zdjęcia 3D | Zdjęcia przestrzenne HEIC i filmy przestrzenne MV-HEVC z iPhone'a 15 Pro / 16 Pro (filmy: iOS 17+), obrazy obok siebie .jpg/.png z `_sbs` w nazwie, inne obrazy płasko. Każde oko widzi swój obraz. Dalej/wstecz: przyciski w stopce, gest góra/dół, „następne” / „poprzednie” | folder `Przestrzenne`; „zdjęcia 3d” |
+
+**Jak wgrać pliki:** na Macu Finder > iPhone > Pliki > CardboardXR, przeciągnij pliki do właściwego folderu
+(`PDF`, `Srodowiska`, `Modele`, `Przestrzenne`; brakujący folder utwórz). Albo w aplikacji Pliki na iPhonie:
+Na moim iPhonie > CardboardXR. Nazwy folderów bez polskich znaków, jak wyżej.
+
 ## Gdy coś nie działa
 
 | Objaw | Co zrobić |

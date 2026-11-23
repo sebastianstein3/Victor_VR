@@ -237,3 +237,25 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
 - Przeglądarka po zakończeniu zmiany rozmiaru przebudowuje stronę (nowy rozmiar WKWebView i tekstury),
   pulpit PC dopasowuje proporcje obrazu. Rozmiar zapisywany w `workspace.json`.
 - Do sprawdzenia na urządzeniu: płynność zmiany rozmiaru i przebudowa tekstury przeglądarki.
+
+## 6. Narzędzia z menu „Więcej” (napisy, widgety, PDF, środowiska, modele 3D, zdjęcia 3D)
+Dodane: napisy na żywo z tłumaczeniem (`LiveCaptions.cs`, `CardboardXRTranslate.swift`, framework Translation,
+pl↔en wg języka przycisku „PL”), widgety Zegar / Minutnik / Notatka / Pogoda (Open-Meteo, miasto w
+`Documents/pogoda.txt`) / Kalendarz (EventKit), czytnik PDF (`PdfView.cs`, `CardboardXRPdf.mm`; strony
+przyciskami, gestem góra/dół, głosem), środowiska 360 (`EnvironmentSphere.cs`: Zmierzch, Noc, Ocean, Kosmos
+i własne pliki z `Documents/Srodowiska`; passthrough wyłączony na czas pokazu), modele 3D (`ModelViewer.cs`,
+glTFast, `Documents/Modele`, ustawianie na powierzchni, panel -30°/+30°/-/+), zdjęcia i filmy przestrzenne
+(`SpatialMediaView.cs`, `CardboardXRSpatial.swift`: HEIC, MV-HEVC, `_sbs`; każde oko własny obraz). Wszystko z
+docka przez „Więcej”; komendy głosowe w `WorkspaceDemo.TryVoiceCommand`. Pakiet `com.unity.cloud.gltfast`
+jest opcjonalny (`CXR_GLTF`).
+
+**Nic z tego nie było kompilowane ani uruchamiane na urządzeniu.** Do sprawdzenia na Macu i iPhonie:
+- **Translation:** dostępność API (iOS 26.4+), pobieranie języków w Ustawieniach iOS, zachowanie bez
+  pobranych modeli; mostek Swift w Unity (kolejność kompilacji, nagłówek `UnityFramework-Swift.h`).
+- **MV-HEVC:** wydajność dekodowania na głównym wątku (możliwe przycinanie), pamięć przy długich filmach,
+  poprawny podział na lewe/prawe oko.
+- **glTFast:** brakujące shadery w buildzie (`GltfShaders.cs`), rozmiar builda, modele z teksturami
+  rozszerzonymi; bez pakietu funkcja jest wyłączona.
+- **EventKit:** uprawnienie do kalendarza (`NSCalendarsFullAccessUsageDescription`), zachowanie po odmowie.
+- Ogólnie: pogoda wymaga internetu, PDF i środowiska wideo – pamięć i płynność, passthrough po wyjściu ze
+  środowiska, zapis widgetów w `workspace.json`.

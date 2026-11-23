@@ -48,3 +48,24 @@ Zacznij od przeczytania `AUDIT_PL.md` (stan prac, co naprawiono, co zostało) i 
 ## Po zmianie
 Krótko zaktualizuj `AUDIT_PL.md` (co zrobiono / co zostało) i commituj po polsku lub angielsku, małymi
 commitami. Przed `git push` upewnij się, że remote `origin` wskazuje na `Victor_VR`.
+
+## Narzędzia z menu „Więcej” (dok w demo Workspace)
+Nic z tego nie było kompilowane ani uruchamiane (patrz `AUDIT_PL.md`, sekcja „Narzędzia z menu Więcej”).
+- **Skrypty** (`Assets/_Project/Demos/Workspace/Scripts/`): `LiveCaptions.cs` (napisy + tłumaczenie),
+  `Widgets.cs` (Zegar, Minutnik, Notatka, Pogoda, Kalendarz; zapis w `workspace.json`), `PdfView.cs`,
+  `EnvironmentSphere.cs` (środowiska 360), `ModelViewer.cs` (modele 3D), `SpatialMediaView.cs`
+  (zdjęcia i filmy przestrzenne). Otwiera je przycisk „Więcej” w docku; głosem: napisy, zegar, minutnik,
+  notatka, pogoda, kalendarz, pdf, środowisko / pokój, modele, zdjęcia 3d (`WorkspaceDemo.TryVoiceCommand`).
+- **Wtyczki natywne** (`Assets/Plugins/iOS/`): `CardboardXRTranslate.swift` (Translation, iOS 26.4+, języki
+  pobiera się w Ustawieniach iOS), `CardboardXRPdf.mm` (PDFKit), `CardboardXRCalendar.mm` (EventKit),
+  `CardboardXRSpatial.swift` (HEIC przestrzenne i MV-HEVC, filmy od iOS 17). Frameworki, uprawnienia
+  (kalendarz, mowa, sieć lokalna) i `GltfShaders.cs` (shadery glTFast do builda) są w
+  `Assets/Editor/ProjectBootstrap/`.
+- **Foldery w Documents** (Finder: iPhone > Pliki > aplikacja, albo aplikacja Pliki): `PDF`, `Srodowiska`
+  (equirect .jpg/.png lub 360 .mp4/.mov), `Modele` (.glb/.gltf), `Przestrzenne` (HEIC, MV-HEVC, `_sbs`),
+  `pogoda.txt` (miasto, domyślnie Warszawa).
+- **Pakiety opcjonalne** włączają kod przez `versionDefines` w asmdef dema: `CXR_GLTF`
+  (`com.unity.cloud.gltfast`, dodaj po nazwie w Package Managerze; bez niego „Modele 3D” się nie zbudują
+  w pełni) i `CXR_WEBRTC` (`com.unity.webrtc`, płynny pulpit PC).
+- Ograniczenia: Translation tylko iOS 26.4+, filmy przestrzenne iOS 17+; pamiętaj o `Destroy(komponent)` i
+  `WorkspaceAnchors` przy nowych panelach.
