@@ -27,6 +27,8 @@ namespace CardboardXR.Demos.Workspace
         bool m_Pinned;
         bool m_IsDragging;
         float m_DragDistance = 1.35f;
+        Vector3 m_DragOffset = new(0f, 0f, 1.35f);
+        RemoteDesktopReceiver m_Remote;
         Transform m_Head;
 
         public event Action<VirtualScreen> Closed;
@@ -97,8 +99,8 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_BodyText != null)
                 m_BodyText.gameObject.SetActive(false);
-            var receiver = gameObject.AddComponent<RemoteDesktopReceiver>();
-            receiver.Initialize(m_CanvasRect, host);
+            m_Remote = gameObject.AddComponent<RemoteDesktopReceiver>();
+            m_Remote.Initialize(m_CanvasRect, host);
         }
 
         // Layout in dp, from the top of a 520 x 440 panel down. Every button is a full 56 dp target
@@ -161,6 +163,11 @@ namespace CardboardXR.Demos.Workspace
         public bool ClickAtCursor()
         {
             Focused?.Invoke(this);
+            if (m_Remote != null && CursorInsideBody())
+            {
+                m_Remote.SendInputEvent("click", m_CursorPos.x, m_CursorPos.y);
+                return true;
+            }
             foreach (var button in GetComponentsInChildren<M3Button>(false))
             {
                 if (!button.isActiveAndEnabled || !button.Interactable)
@@ -183,6 +190,9 @@ namespace CardboardXR.Demos.Workspace
             TogglePin();
         }
 
+        bool CursorInsideBody() =>
+            Mathf.Abs(m_CursorPos.x - BodyCenter.x) <= BodySize.x / 2f && Mathf.Abs(m_CursorPos.y - BodyCenter.y) <= BodySize.y / 2f;
+
         bool CursorIsOver(RectTransform rect)
         {
             // The rect's corners in the window's own dp space, the space the cursor moves in.
@@ -200,8 +210,12 @@ namespace CardboardXR.Demos.Workspace
             return m_CursorPos.x >= minX && m_CursorPos.x <= maxX && m_CursorPos.y >= minY && m_CursorPos.y <= maxY;
         }
 
+        // A PC desktop window has no text area: typing and dictation go to the PC (the receiver).
+        public bool IsRemoteDesktop => m_Remote != null;
+
         public void AppendChar(char c)
         {
+            if (m_Remote != null) { m_Remote.SendText(c.ToString()); Focused?.Invoke(this); return; }
             m_Content += c;
             UpdateContentDisplay();
             Focused?.Invoke(this);
@@ -209,6 +223,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void AppendText(string str)
         {
+            if (m_Remote != null) { m_Remote.SendText(str); Focused?.Invoke(this); return; }
             if (!string.IsNullOrEmpty(str))
             {
                 m_Content += str;
@@ -219,6 +234,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void Backspace()
         {
+            if (m_Remote != null) { m_Remote.SendKey("Backspace"); Focused?.Invoke(this); return; }
             if (m_Content.Length > 0)
             {
                 m_Content = m_Content.Substring(0, m_Content.Length - 1);
@@ -236,6 +252,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void AppendNewline()
         {
+            if (m_Remote != null) { m_Remote.SendKey("Enter"); Focused?.Invoke(this); return; }
             m_Content += "\n";
             UpdateContentDisplay();
             Focused?.Invoke(this);
@@ -245,7 +262,8 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_BodyText != null)
             {
-                m_BodyText.text = m_Content + "<color=#80c5ff>|</color>"; // Cursor visual
+                // <noparse>: a typed or dictated "<" must show as text, not start a TMP tag.
+                m_BodyText.text = "<noparse>" + m_Content.Replace("</noparse>", "") + "</noparse><color=#80c5ff>|</color>";
                 m_BodyText.ForceMeshUpdate();
                 m_BodyText.pageToDisplay = Mathf.Max(1, m_BodyText.textInfo.pageCount);
             }
@@ -263,6 +281,8 @@ namespace CardboardXR.Demos.Workspace
             if (m_Pinned)
                 return;
             m_IsDragging = true;
+            if (m_Head != null)
+                m_DragOffset = Quaternion.Inverse(m_Head.rotation) * (transform.position - m_Head.position);
             if (m_GrabButton != null)
                 m_GrabButton.Label.text = "Upuść w tym miejscu";
         }
@@ -303,8 +323,9 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_IsDragging && m_Head != null && m_CanvasRect != null)
             {
-                // Smoothly follows user gaze at drag distance
-                Vector3 targetPos = m_Head.position + m_Head.forward * m_DragDistance;
+                // Carried where it was in the view when the drag began (not snapped to the view's centre),
+                // so its grab button stays where the user is looking and can be pressed again to drop it.
+                Vector3 targetPos = m_Head.position + m_Head.rotation * m_DragOffset;
                 Quaternion targetRot = Quaternion.LookRotation(targetPos - m_Head.position, Vector3.up);
 
                 transform.position = Vector3.Lerp(transform.position, targetPos, Time.unscaledDeltaTime * 10f);

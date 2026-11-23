@@ -31,6 +31,9 @@ namespace CardboardXR.Demos.Workspace
         public event Action LeftClicked;
         public event Action RightClicked;
 
+        // When the fingertip was last on the pad (Time.unscaledTime).
+        public float LastTouchTime { get; private set; } = float.NegativeInfinity;
+
         public static DeskTrackpad Create(Transform parent, HandTracker tracker, VirtualScreen targetScreen, float distance = 0.85f)
         {
             var panel = WorldUi.Panel("Desk Trackpad", parent, new Vector2(k_Width, k_Height), distance,
@@ -66,7 +69,12 @@ namespace CardboardXR.Demos.Workspace
         void Update()
         {
             if (m_Tracker == null || !m_Tracker.isActiveAndEnabled || !m_Tracker.IsTracking || m_CanvasRect == null)
+            {
+                // Hand lost: forget the touch, without a click, so the cursor doesn't jump from a stale
+                // position when it comes back.
+                m_IsTouching = false;
                 return;
+            }
 
             float canvasScale = m_CanvasRect.lossyScale.x;
             if (canvasScale <= 0f)
@@ -86,6 +94,7 @@ namespace CardboardXR.Demos.Workspace
 
             if (isInside)
             {
+                LastTouchTime = Time.unscaledTime;
                 Vector2 currentPos = new Vector2(localX, localY);
 
                 if (!m_IsTouching)
@@ -138,6 +147,12 @@ namespace CardboardXR.Demos.Workspace
                     m_IsTouching = false;
                 }
             }
+        }
+
+        void OnDestroy()
+        {
+            if (m_ClickClip != null)
+                Destroy(m_ClickClip);
         }
 
         void PlayClick(float pitch)

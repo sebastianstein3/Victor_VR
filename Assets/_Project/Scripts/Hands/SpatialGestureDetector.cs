@@ -34,6 +34,10 @@ namespace CardboardXR.Hands
         const float k_SwipeSpeedThreshold = 1.1f; // meters per second
         const float k_SwipeCooldown = 0.4f;       // seconds between swipe triggers
         const float k_PinchCloseDist = 0.028f;
+        const float k_PinchReleaseDist = 0.04f;   // a pinch lets go only above this (hysteresis)
+        const float k_SwipeMinTravel = 0.10f;     // meters the wrist must move for a swipe
+        const float k_HandednessRate = 0.3f;      // as HandSubsystemFeed: the model's left/right reading flips now and then
+        const float k_SideChangeMargin = 0.2f;
         const int k_HistoryCapacity = 10;
 
         struct PositionSample
@@ -54,6 +58,10 @@ namespace CardboardXR.Hands
         readonly Queue<PositionSample> m_VelocityHistory = new();
         HandPose m_CurrentPose = HandPose.None;
         float m_LastGestureTime;
+        float m_RightChance = 0.5f;
+        bool m_IsRight = true;
+        bool m_HasSide;
+        int m_LastResult = -1;
 
         public HandPose CurrentPose => m_CurrentPose;
         public event Action<HandPose> PoseChanged;
@@ -69,6 +77,7 @@ namespace CardboardXR.Hands
                     PoseChanged?.Invoke(m_CurrentPose);
                 }
                 m_VelocityHistory.Clear();
+                m_HasSide = false;
                 return;
             }
 
@@ -78,7 +87,7 @@ namespace CardboardXR.Hands
             // Which way the palm faces, from the camera image and which hand it is (the base project's
             // PalmGesture, tested on a phone). The phone's camera sees what the eyes see, so a palm
             // toward the camera is a palm toward the user.
-            bool rightHand = m_Tracker.HandednessScore >= 0.5f;
+            bool rightHand = UpdateSide();
             float palmFacing = float.NaN;
             var image = m_Tracker.ImageLandmarks;
             if (image != null && image.Count >= HandGeometry.JointCount)
@@ -88,7 +97,14 @@ namespace CardboardXR.Hands
             }
 
             // 1. Recognize Static Pose
-            var detectedPose = EvaluatePose(joints, headForward, m_Tracker.PinchDistance, rightHand, palmFacing);
+            // PinchDistance is held from the last good 3D fit while ShapeFits is false: don't let a stale
+            // value latch a pinch; the joints' own distance still counts.
+            float pinchDistance = m_Tracker.ShapeFits ? m_Tracker.PinchDistance : float.MaxValue;
+            var detectedPose = EvaluatePose(joints, headForward, pinchDistance, rightHand, palmFacing);
+            // Hysteresis: a pinch that is already on stays on until the fingers are clearly apart.
+            if (m_CurrentPose == HandPose.Pinch && detectedPose != HandPose.Pinch &&
+                Mathf.Min(pinchDistance, Vector3.Distance(joints[HandGeometry.ThumbTip], joints[HandGeometry.IndexTip])) < k_PinchReleaseDist)
+                detectedPose = HandPose.Pinch;
             if (detectedPose != m_CurrentPose)
             {
                 m_CurrentPose = detectedPose;
@@ -103,7 +119,30 @@ namespace CardboardXR.Hands
                 m_VelocityHistory.Clear();
                 return;
             }
-            TrackDynamicGestures(joints[0]); // Wrist position
+            // Wrist position in the head's own space: turning or moving the head must not look like a
+            // swipe (in world space a still hand sweeps past at ~1 m/s when the head turns).
+            TrackDynamicGestures(m_Head != null ? m_Head.InverseTransformPoint(joints[0]) : joints[0]);
+        }
+
+        // Which hand it is, smoothed like HandSubsystemFeed does: one flipped reading would otherwise
+        // swap "palm to me" and "palm away" for a frame.
+        bool UpdateSide()
+        {
+            if (m_Tracker.ResultCount == m_LastResult)
+                return m_IsRight;
+            m_LastResult = m_Tracker.ResultCount;
+            float right = m_Tracker.HandednessScore;
+            if (!m_HasSide)
+            {
+                m_HasSide = true;
+                m_RightChance = right;
+                m_IsRight = right >= 0.5f;
+                return m_IsRight;
+            }
+            m_RightChance = Mathf.Lerp(m_RightChance, right, k_HandednessRate);
+            if (m_IsRight ? m_RightChance < 0.5f - k_SideChangeMargin : m_RightChance > 0.5f + k_SideChangeMargin)
+                m_IsRight = !m_IsRight;
+            return m_IsRight;
         }
 
         void TrackDynamicGestures(Vector3 currentWristPos)
@@ -124,25 +163,28 @@ namespace CardboardXR.Hands
             if (dt < 0.05f)
                 return;
 
+            // Positions are already in the head's space (see Update)
             Vector3 delta = currentWristPos - oldest.position;
-            Vector3 velocity = delta / dt;
+            Vector3 localVel = delta / dt;
 
-            // Project velocity relative to head orientation
-            Vector3 localVel = m_Head != null ? m_Head.InverseTransformDirection(velocity) : velocity;
-
-            if (Mathf.Abs(localVel.x) > k_SwipeSpeedThreshold && Mathf.Abs(localVel.x) > Mathf.Abs(localVel.y) * 1.5f)
+            // Fast AND far enough: a quick small twitch or the start of a reach is not a swipe.
+            if (Mathf.Abs(localVel.x) > k_SwipeSpeedThreshold && Mathf.Abs(delta.x) > k_SwipeMinTravel &&
+                Mathf.Abs(localVel.x) > Mathf.Abs(localVel.y) * 1.5f)
             {
                 var gesture = localVel.x > 0 ? DynamicGesture.SwipeRight : DynamicGesture.SwipeLeft;
                 m_LastGestureTime = now;
                 GestureDetected?.Invoke(gesture);
             }
-            else if (Mathf.Abs(localVel.y) > k_SwipeSpeedThreshold && Mathf.Abs(localVel.y) > Mathf.Abs(localVel.x) * 1.5f)
+            else if (Mathf.Abs(localVel.y) > k_SwipeSpeedThreshold && Mathf.Abs(delta.y) > k_SwipeMinTravel &&
+                     Mathf.Abs(localVel.y) > Mathf.Abs(localVel.x) * 1.5f)
             {
                 var gesture = localVel.y > 0 ? DynamicGesture.SwipeUp : DynamicGesture.SwipeDown;
                 m_LastGestureTime = now;
                 GestureDetected?.Invoke(gesture);
             }
-            else if (localVel.z > k_SwipeSpeedThreshold * 1.2f)
+            // A push: clearly forward, far, and mostly along z (monocular depth is noisy, so be strict)
+            else if (localVel.z > k_SwipeSpeedThreshold * 1.2f && delta.z > k_SwipeMinTravel * 1.2f &&
+                     localVel.z > 2f * Mathf.Max(Mathf.Abs(localVel.x), Mathf.Abs(localVel.y)))
             {
                 m_LastGestureTime = now;
                 GestureDetected?.Invoke(DynamicGesture.PushForward);
@@ -171,17 +213,18 @@ namespace CardboardXR.Hands
             if (indexExt && !middleExt && !ringExt && !pinkyExt)
                 return HandPose.Pointing;
 
-            // 2. Fist: All 4 main fingers curled
-            if (!indexExt && !middleExt && !ringExt && !pinkyExt && !thumbExt)
-                return HandPose.Fist;
-
-            // 3. Thumbs Up: Thumb pointing UP, other 4 curled
+            // 2. Thumbs Up: Thumb extended and pointing UP, other 4 curled
             if (thumbExt && !indexExt && !middleExt && !ringExt && !pinkyExt)
             {
                 Vector3 thumbDir = (joints[4] - joints[2]).normalized;
                 if (Vector3.Dot(thumbDir, Vector3.up) > 0.55f)
                     return HandPose.ThumbsUp;
             }
+
+            // 3. Fist: All 4 main fingers curled. The thumb doesn't matter: in a real fist it lies across
+            // the fingers, which by distance alone looks "extended".
+            if (!indexExt && !middleExt && !ringExt && !pinkyExt)
+                return HandPose.Fist;
 
             // 4. Open Palm: All 5 fingers extended
             if (indexExt && middleExt && ringExt && pinkyExt)

@@ -113,6 +113,24 @@ namespace CardboardXR.Demos.Workspace.Tests
         }
 
         [Test]
+        public void RecognizesFistWithTheThumbAcrossTheFingers()
+        {
+            var joints = CreateMockJoints();
+            joints[0] = Vector3.zero;
+            for (int i = 5; i < 21; i += 4)
+            {
+                joints[i] = new Vector3(0f, 0.05f, 0f);
+                joints[i + 1] = new Vector3(0f, 0.08f, 0f);
+                joints[i + 3] = new Vector3(0f, 0.05f, 0f);
+            }
+            // Thumb lying sideways across the fingers: far from the wrist, but not pointing up
+            joints[2] = new Vector3(0.03f, 0.02f, 0f);
+            joints[4] = new Vector3(-0.03f, 0.04f, 0f);
+
+            Assert.AreEqual(HandPose.Fist, SpatialGestureDetector.EvaluatePose(joints, Vector3.forward, 0.1f));
+        }
+
+        [Test]
         public void FeedClipsCycleForwardAndBackwardCorrectly()
         {
             int totalClips = 4;

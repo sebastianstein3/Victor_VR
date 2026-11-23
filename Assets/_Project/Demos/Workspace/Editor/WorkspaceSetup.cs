@@ -23,7 +23,9 @@ namespace ProjectBootstrap
                 SixDof = Need.On,
                 Passthrough = Need.On,
                 Hands = Need.On,
-                ScanSurfaces = true
+                // Nothing reads the scanned surfaces yet (the keyboard floats); scanning would only cost
+                // CPU and pause hand tracking when it starts. Turn on with "keyboard on the real desk".
+                ScanSurfaces = false
             },
         };
 

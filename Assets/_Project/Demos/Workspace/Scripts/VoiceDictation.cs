@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace CardboardXR.Demos.Workspace
 {
@@ -126,6 +127,9 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_IsRecording)
                 CardboardXR_SpeechStop();
+            // A permission prompt still open goes unanswered here (the receiver is gone): ask again next time.
+            if (s_Auth == Auth.Asking)
+                s_Auth = Auth.Unknown;
         }
 
         // Called by the receiver for what the native plugin sends.
@@ -189,13 +193,16 @@ namespace CardboardXR.Demos.Workspace
         }
 
         // UnitySendMessage can only reach a MonoBehaviour by GameObject name, so the plugin talks to this.
+        // Nothing in C# calls these methods, so [Preserve] keeps IL2CPP's code stripping (level 4 on
+        // iPhone) from removing them.
+        [Preserve]
         class Receiver : MonoBehaviour
         {
             public VoiceDictation Owner;
-            void OnNativeState(string state) { if (Owner != null) Owner.HandleState(state); }
-            void OnNativePartial(string text) { if (Owner != null) Owner.HandlePartial(text); }
-            void OnNativeFinal(string text) { if (Owner != null) Owner.HandleFinal(text); }
-            void OnNativeError(string message) { if (Owner != null) Owner.HandleError(message); }
+            [Preserve] void OnNativeState(string state) { if (Owner != null) Owner.HandleState(state); }
+            [Preserve] void OnNativePartial(string text) { if (Owner != null) Owner.HandlePartial(text); }
+            [Preserve] void OnNativeFinal(string text) { if (Owner != null) Owner.HandleFinal(text); }
+            [Preserve] void OnNativeError(string message) { if (Owner != null) Owner.HandleError(message); }
         }
 #else
         string m_DeviceName;

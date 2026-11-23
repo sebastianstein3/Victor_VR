@@ -50,6 +50,33 @@ Przy pierwszym użyciu iOS zapyta o zgodę na mikrofon i rozpoznawanie mowy. W t
 przechodzą na jakość „rozmowy" (tak jest w każdej aplikacji, która nagrywa). Tryb offline: ustaw
 `VoiceDictation.OnDeviceOnly = true` (wymaga pobranego języka dyktowania w iOS).
 
+## 1c. Trzecia tura: przegląd trzema niezależnymi recenzentami (2026-11-23)
+
+| Problem | Skutek | Naprawa |
+|---|---|---|
+| Dock (pitch -22°, 1,2 m) leżał kątowo **za klawiaturą** | Przycisków docka nie dało się wskazać wzrokiem (bliższa klawiatura zabierała trafienie) | Nowy układ wg kątów (poniżej) |
+| Gładzik w 0,28 m na prawo nachodził na klawiaturę (ta ma 0,33 m pół-szerokości) | Stuknięcie w L/Enter klikało też gładzik | Gładzik obok klawiatury (44° yaw ≈ 34° łuku) |
+| Okna co 28°, a okno ma ~41° szerokości; trzecie pod telefonem | Okna zasłaniały sobie przyciski | Sloty co 46°: 0°, -46°, -92°, +86°, +132°, potem rząd wyżej; telefon +40° |
+| Przeciąganie uszczypnięciem nigdy nie startowało (wzrok trafia w „Container” przycisku, a przyciski mają pierwszeństwo w `PinchRouter`), a okno w trakcie przeciągania centrowało się na wzroku, uciekając z uchwytem | **Nie dało się upuścić okna** | Okno niesione w tym miejscu widoku, gdzie było; uszczypnięcie gdziekolwiek je upuszcza |
+| Gest STOP chował też dock | Po przypadkowym geście brak sterowania | STOP chowa tylko klawiaturę i gładzik; „Reset biurka” je przywraca |
+| Machnięcia liczone w przestrzeni świata | **Obrót głowy przełączał ekrany** | Prędkość nadgarstka względem głowy, minimalna droga 10 cm, cisza 1 s po stuknięciu w biurko, ignorowane z ręką nisko |
+| Strona dłoni z surowego odczytu klatka po klatce | Mignięcia zamieniały „dłoń do mnie/od siebie” | Wygładzanie jak w `HandSubsystemFeed` |
+| Pięść wymagała schowanego kciuka | Prawdziwa pięść rozpoznawana jako nic/kciuk w górę | Kciuk bez znaczenia (po teście kciuka w górę); nowy test |
+| Uszczypnięcie bez histerezy i z „zamrożonym” `PinchDistance` | Migotanie / zatrzaśnięty pinch | Puszczenie dopiero > 4 cm, `PinchDistance` tylko gdy `ShapeFits` |
+| Dyktowanie: stary 4-sekundowy strażnik i spóźnione callbacki | Mogły przerwać **następne** dyktowanie i pokazać fałszywy błąd | Licznik generacji w pluginie |
+| Metody odbierające wynik z iOS mogły zostać wycięte (stripping level 4, IL2CPP) | Dyktowanie „nic nie robi” | `[Preserve]` |
+| Połączenie / Siri / wyjęcie AirPods w trakcie | Wieczne „nagrywanie” | Obsługa przerwań i zmiany trasy audio |
+| Zamknięcie dema w trakcie pytania o zgodę | Dyktowanie już nigdy nie startowało | Reset stanu zgody |
+| Tekst na ekranie „Pulpit PC” trafiał do ukrytego pola | Pisanie i dyktowanie „znikały” | Idą do odbiornika PC (w trybie demo widać je na pasku stanu) |
+| Wpisany/podyktowany „<” psuł znaczniki TMP | Rozjechany tekst | `<noparse>` |
+| Czat zapisywany w statycznej tablicy | Wiadomości wracały po ponownym wejściu do dema | Kopia na instancję telefonu |
+| Utrata śledzenia dłoni zostawiała stan dotyku | Skok kursora / klawisz „zablokowany” | Reset stanu |
+| Demo prosiło o skan powierzchni, z którego nic nie korzysta | Koszt CPU i pauza śledzenia dłoni | `ScanSurfaces = false` (włączyć przy „klawiaturze na prawdziwym blacie”) |
+
+**Ograniczenie fizyczne (z `KNOWN_ISSUES.md` bazy):** kamera widzi dłonie tylko ±21° w pionie od kierunku
+głowy, a autor bazy celowo zrezygnował ze „stukania palcem”. Klawiatura palcem działa więc, **gdy patrzysz
+na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~15 cm od kamery model dłoni się sypie.
+
 ## 2. Czego NIE naprawiłem (wymaga Twojej decyzji lub urządzenia)
 
 1. **Brak plików `.meta` dla nowych plików** (`Demos/Workspace/**`, `SpatialGestureDetector.cs`) i brak sceny
@@ -88,3 +115,33 @@ przechodzą na jakość „rozmowy" (tak jest w każdej aplikacji, która nagryw
 - Dla iPhone'a: `Tools/ios_build_and_run.sh` wymaga Maca z Xcode/Unity; z Windowsa/telefonu można
   zbudować `.ipa` przez GitHub Actions (`.github/workflows/ios-ipa.yml`, sekrety `UNITY_LICENSE`,
   `UNITY_EMAIL`, `UNITY_PASSWORD`; plik buduje niepodpisane `.ipa` po wypchnięciu tagu `vX.Y.Z`).
+
+## 4. Możliwości rozbudowy (priorytety)
+
+**Wysoki – realna wartość, w zasięgu:**
+1. **Klawiatura na prawdziwym blacie.** Bazowy `RoomBoundary` (+ `ScanSurfaces`) wykrywa stoły,
+   `AnchorPlacer` przypina obiekty do pokoju, a `DepthSampler` (LiDAR) mierzy głębię pod palcem. Położenie
+   klawiatury płasko na wykrytym blacie dałoby prawdziwy „opór” stołu i lepsze wykrywanie stuknięć.
+2. **Okna przypięte do pokoju** (kotwice ARKit przez `AnchorPlacer`) zamiast względem głowy przy starcie;
+   później zapis układu między uruchomieniami (dziś baza nie ma trwałości kotwic: PlayerPrefs + ARWorldMap).
+3. **Prawdziwe wideo w telefonie / oknie**: demo Video ma gotowe `VideoLibrary`, `DriveLink`,
+   `DriveDownloader` i `VideoPlayer` (pliki z telefonu i linki Google Drive). Zamiast atrap TikTok/Shorts:
+   własne klipy pionowe.
+4. **Ostrość dłoni przy pisaniu**: `PassthroughHandFocus` przestawia obraz kamery na odległość dłoni.
+5. **Wizualne potwierdzenie stuknięcia**: podświetlenie klawisza pod palcem (hover) i „wciśnięcie” –
+   dziś tylko dźwięk.
+
+**Średni:**
+6. Suwak odległości/rozmiaru okien (`M3.Slider`), przełącznik układów (`M3.Segments`), dock jako
+   `M3Toolbar`.
+7. Zdalny pulpit naprawdę: Moonlight/Sunshine (niskie opóźnienie) lub WebRTC (`com.unity.webrtc`);
+   input z gładzika/klawiatury jest już kierowany do `RemoteDesktopReceiver`.
+8. WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
+9. Dźwięk przestrzenny okien: `AudioSource` są, ale nic nie gra – podpiąć wideo/pulpit.
+10. Dyktowanie: podgląd tekstu „na żywo” (`PartialRecognized` już jest), wybór języka w docku, komendy
+    głosowe („nowy ekran”, „wyczyść”).
+
+**Niski / eksperymenty:**
+11. Gesty: pięść = „chwyć wszystkie okna”, dłoń do siebie = menu na nadgarstku (detektor już to rozpoznaje).
+12. `PassthroughLighting` dla oświetlenia okien jak w pokoju; `ScreenFade` przy otwieraniu/zamykaniu.
+13. Zmierzony profil optyczny Shinecon G10 (patrz pkt 9 w sekcji 2).

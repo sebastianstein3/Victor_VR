@@ -29,6 +29,10 @@ static SFSpeechAudioBufferRecognitionRequest* s_Request;
 static SFSpeechRecognitionTask* s_Task;
 static AVAudioEngine* s_Engine;
 static BOOL s_Active;
+// Bumped by every start and teardown: late callbacks from an earlier session (its result handler, its
+// stop guard, a cancel error) compare it and do nothing, so they can't end or spoil the next session.
+static unsigned int s_Generation;
+static BOOL s_ObserversAdded;
 static AVAudioSessionCategory s_SavedCategory;
 static AVAudioSessionMode s_SavedMode;
 static AVAudioSessionCategoryOptions s_SavedOptions;
@@ -45,7 +49,10 @@ static void RestoreAudioSession()
 {
     AVAudioSession* session = [AVAudioSession sharedInstance];
     NSError* error = nil;
-    [session setCategory:s_SavedCategory mode:s_SavedMode options:s_SavedOptions error:&error];
+    if (s_SavedCategory != nil)
+        [session setCategory:s_SavedCategory mode:s_SavedMode options:s_SavedOptions error:&error];
+    // Unity's audio keeps playing through the session, so keep it active.
+    [session setActive:YES error:nil];
 }
 
 // Stops everything that is running; safe to call more than once.
@@ -54,6 +61,7 @@ static void Teardown(BOOL notify)
     if (!s_Active)
         return;
     s_Active = NO;
+    s_Generation++;
 
     if (s_Engine)
     {
@@ -68,12 +76,40 @@ static void Teardown(BOOL notify)
     }
     if (s_Task)
     {
-        [s_Task cancel];
+        SFSpeechRecognitionTask* task = s_Task;
         s_Task = nil;
+        [task cancel]; // its handler's late call sees a newer generation and does nothing
     }
     RestoreAudioSession();
     if (notify)
         Send("OnNativeState", @"ended");
+}
+
+// A phone call, Siri, or AirPods being taken out stop the audio engine without telling anyone; end the
+// session cleanly instead of leaving it "recording" with no sound coming in.
+static void AddObserversOnce()
+{
+    if (s_ObserversAdded)
+        return;
+    s_ObserversAdded = YES;
+    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
+    [center addObserverForName:AVAudioSessionInterruptionNotification object:nil queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification* note) {
+        NSNumber* type = note.userInfo[AVAudioSessionInterruptionTypeKey];
+        if (s_Active && type.unsignedIntegerValue == AVAudioSessionInterruptionTypeBegan)
+        {
+            Send("OnNativeError", @"Nagrywanie przerwane (połączenie lub Siri).");
+            Teardown(YES);
+        }
+    }];
+    [center addObserverForName:AVAudioEngineConfigurationChangeNotification object:nil queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification* note) {
+        if (s_Active && note.object == s_Engine)
+        {
+            Send("OnNativeError", @"Zmieniło się wejście dźwięku (np. słuchawki); włącz dyktowanie ponownie.");
+            Teardown(YES);
+        }
+    }];
 }
 
 extern "C" void CardboardXR_SpeechRequestAuthorization()
@@ -100,6 +136,7 @@ extern "C" int CardboardXR_SpeechStart(const char* localeId, int onDeviceOnly)
 {
     if (s_Active)
         return 1;
+    AddObserversOnce();
 
     NSLocale* locale = [NSLocale localeWithLocaleIdentifier:localeId ? [NSString stringWithUTF8String:localeId] : @"pl-PL"];
     s_Recognizer = [[SFSpeechRecognizer alloc] initWithLocale:locale];
@@ -167,8 +204,12 @@ extern "C" int CardboardXR_SpeechStart(const char* localeId, int onDeviceOnly)
     }
 
     s_Active = YES;
+    const unsigned int generation = ++s_Generation;
     s_Task = [s_Recognizer recognitionTaskWithRequest:s_Request
                                         resultHandler:^(SFSpeechRecognitionResult* result, NSError* taskError) {
+        if (generation != s_Generation)
+            return; // an earlier session's late call (s_Generation is read without a lock; a stale
+                    // read can only drop one late message)
         if (result != nil)
         {
             NSString* text = result.bestTranscription.formattedString;
@@ -185,7 +226,10 @@ extern "C" int CardboardXR_SpeechStart(const char* localeId, int onDeviceOnly)
                 if (taskError.code != 1110)
                     Send("OnNativeError", taskError.localizedDescription);
             }
-            dispatch_async(dispatch_get_main_queue(), ^{ Teardown(YES); });
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (generation == s_Generation)
+                    Teardown(YES);
+            });
         }
     }];
 
@@ -205,9 +249,11 @@ extern "C" void CardboardXR_SpeechStop()
     }
     if (s_Request)
         [s_Request endAudio];
-    // The task's result handler finishes the teardown. If it never answers, a guard cleans up.
+    // The task's result handler finishes the teardown. If it never answers, a guard cleans up, but
+    // only this session: a new one started in the meantime has a newer generation.
+    const unsigned int generation = s_Generation;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (s_Active)
+        if (s_Active && generation == s_Generation)
             Teardown(YES);
     });
 }

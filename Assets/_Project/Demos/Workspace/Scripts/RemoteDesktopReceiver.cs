@@ -56,11 +56,35 @@ namespace CardboardXR.Demos.Workspace
                 Destroy(m_DesktopTexture);
         }
 
+        // Typing for the PC. There is no connection yet, so it is logged and shown on the status line.
+        public void SendText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+            Debug.Log($"[RemoteDesktop] Tekst do PC (demo): \"{text}\"");
+            ShowSent(text);
+        }
+
+        public void SendKey(string key)
+        {
+            Debug.Log($"[RemoteDesktop] Klawisz do PC (demo): {key}");
+            ShowSent($"[{key}]");
+        }
+
+        string m_SentTail = "";
+
+        void ShowSent(string piece)
+        {
+            m_SentTail = (m_SentTail + piece);
+            if (m_SentTail.Length > 30)
+                m_SentTail = m_SentTail.Substring(m_SentTail.Length - 30);
+            if (m_StatusText != null)
+                m_StatusText.text = $"TRYB DEMO, nie wysłano: <noparse>{m_SentTail.Replace("</noparse>", "")}</noparse>";
+        }
+
         public void SendInputEvent(string type, float x, float y)
         {
-            if (!m_IsConnected)
-                return;
-            // Ready for sending UDP / WebSocket input packets to PC companion app
+            // Not connected (demo): only logged. Ready for sending UDP / WebSocket input packets to PC companion app
             Debug.Log($"[RemoteDesktop] Wys\u0142ano zdarzenie: {type} ({x:F1}, {y:F1}) do PC");
         }
 

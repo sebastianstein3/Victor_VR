@@ -44,6 +44,9 @@ namespace CardboardXR.Demos.Workspace
         public event Action EnterPressed;
         public event Action ClearPressed;
 
+        // When the fingertip last pressed a key (Time.unscaledTime), so other input can stay quiet while typing.
+        public float LastTouchTime => m_LastPressTime;
+
         public bool Shift
         {
             get => m_Shift;
@@ -158,7 +161,10 @@ namespace CardboardXR.Demos.Workspace
         void Update()
         {
             if (m_Tracker == null || !m_Tracker.isActiveAndEnabled || !m_Tracker.IsTracking)
+            {
+                m_HeldKey = null; // the hand is gone, so it isn't resting on a key any more
                 return;
+            }
 
             // Finger tap detection with IndexTip
             var indexTipWorld = m_Tracker.Joints[HandGeometry.IndexTip];
@@ -200,6 +206,12 @@ namespace CardboardXR.Demos.Workspace
             m_HeldKey = touched;
             m_LastPressTime = Time.unscaledTime;
             touchedAction?.Invoke();
+        }
+
+        void OnDestroy()
+        {
+            if (m_ClickClip != null)
+                Destroy(m_ClickClip);
         }
 
         void OnKeyClick(char c)

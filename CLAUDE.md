@@ -30,6 +30,11 @@ Zacznij od przeczytania `AUDIT_PL.md` (stan prac, co naprawiono, co zostało) i 
   `DeskTrackpad` montuj **na obiekcie panelu** statyczną metodą `Create()` (żeby `IsChildOf` działało).
 - Jednostki UI to dp. Odległość dotyku blatu: `Mathf.Abs(local.z * lossyScale.x) < 0.035f` (metry).
 - Przyciski mają mieć pełne 56 dp (`M3.k_ButtonHeight`), odstępy 8 dp; unikaj nakładania.
+- Rozmieszczaj panele **kątowo** (1 dp ≈ 0,08° w każdej odległości): okno 520 dp ≈ 41°. Układ i stałe są
+  w nagłówku `WorkspaceDemo.cs`; panele nie mogą na siebie nachodzić (bliższy zabiera wzrok).
+- Kliknięcie przycisku ma w `PinchRouter` pierwszeństwo przed `IPinchHandler`, a wzrok trafia w dziecko
+  „Container” przycisku – nie wykrywaj przycisków po nazwie w `TryBeginPinch`.
+- Kamera widzi dłonie tylko ±21° w pionie od kierunku głowy (`KNOWN_ISSUES.md`).
 - Czcionka UI (Roboto) nie ma emoji ani `⌫ ⇧ ↵ ─`: używaj zwykłego tekstu / ikon z `M3Icons`.
 - Komponenty dodane na `gameObject` dema niszcz przez `Destroy(komponent)`, nie `.gameObject`.
 - Nic w projekcie nie miało dźwięku: `WorkspaceDemo` dodaje `AudioListener` na głowie. Dźwięki przycisków

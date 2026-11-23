@@ -51,7 +51,7 @@ namespace CardboardXR.Demos.Workspace
                 {
                     "@tech_master: Jak działa ARKit LiDAR w VR! #vr #tech",
                     "@travel_vibes: Zachód słońca nad fiordami w 4K #travel",
-                    "@future_design: Spatial Computing i pływające monitory 💻 #apple",
+                    "@future_design: Spatial Computing i pływające monitory #apple",
                     "@coding_life: Pisanie kodu gestami dłoni w powietrzu! #dev"
                 }
             },
@@ -119,6 +119,9 @@ namespace CardboardXR.Demos.Workspace
         Transform m_Head;
         float m_Distance = 1.25f;
         bool m_IsDragging;
+        Vector3 m_DragOffset = new(0f, 0f, 1.25f);
+        // This phone's own copy of the app table, so a chat sent here doesn't come back in the next session.
+        SocialApp[] m_Apps;
 
         ViewMode m_Mode = ViewMode.Home;
         SocialApp m_CurrentApp;
@@ -162,6 +165,13 @@ namespace CardboardXR.Demos.Workspace
             m_SpatialAudio.rolloffMode = AudioRolloffMode.Logarithmic;
             m_SpatialAudio.minDistance = 0.5f;
             m_SpatialAudio.maxDistance = 8f;
+
+            m_Apps = new SocialApp[s_Apps.Length];
+            for (int i = 0; i < s_Apps.Length; i++)
+            {
+                m_Apps[i] = s_Apps[i];
+                m_Apps[i].sampleClips = (string[])s_Apps[i].sampleClips.Clone();
+            }
 
             BuildPhoneFrame();
             ShowHomeScreen();
@@ -228,10 +238,10 @@ namespace CardboardXR.Demos.Workspace
                 $"[Ty]: {m_ChatDraft}"
             };
             m_CurrentApp.sampleClips = list.ToArray();
-            for (int i = 0; i < s_Apps.Length; i++)
+            for (int i = 0; i < m_Apps.Length; i++)
             {
-                if (s_Apps[i].name == m_CurrentApp.name)
-                    s_Apps[i].sampleClips = m_CurrentApp.sampleClips;
+                if (m_Apps[i].name == m_CurrentApp.name)
+                    m_Apps[i].sampleClips = m_CurrentApp.sampleClips;
             }
             m_CurrentClipIndex = m_CurrentApp.sampleClips.Length - 1;
             m_ChatDraft = "";
@@ -260,9 +270,9 @@ namespace CardboardXR.Demos.Workspace
             float spacingY = 100f;
             float posX = 64f;
 
-            for (int i = 0; i < s_Apps.Length; i++)
+            for (int i = 0; i < m_Apps.Length; i++)
             {
-                var app = s_Apps[i];
+                var app = m_Apps[i];
                 float colX = (i % 2 == 0) ? -posX : posX;
                 float rowY = startY - (i / 2) * spacingY;
 
@@ -375,10 +385,11 @@ namespace CardboardXR.Demos.Workspace
             {
                 if (m_CurrentApp.name == "Messenger")
                 {
-                    string history = string.Join("\n", m_CurrentApp.sampleClips);
+                    // <noparse>: typed or dictated "<" must show as text, not start a TMP tag
+                    string history = "<noparse>" + string.Join("\n", m_CurrentApp.sampleClips).Replace("</noparse>", "") + "</noparse>";
                     string draftLine = string.IsNullOrEmpty(m_ChatDraft)
                         ? "<color=#888888>Pisz na klawiaturze biurkowej...</color>"
-                        : $"<b>Ty:</b> {m_ChatDraft}<color=#0084ff>|</color>";
+                        : $"<b>Ty:</b> <noparse>{m_ChatDraft.Replace("</noparse>", "")}</noparse><color=#0084ff>|</color>";
                     m_ClipContentText.text = $"<b>[Czat Messenger]</b>\n\n{history}\n\n--------------------\n{draftLine}";
                     ShowLastPage(m_ClipContentText);
                     if (m_StatusText != null)
@@ -429,6 +440,8 @@ namespace CardboardXR.Demos.Workspace
         public void StartDragging()
         {
             m_IsDragging = true;
+            if (m_Head != null)
+                m_DragOffset = Quaternion.Inverse(m_Head.rotation) * (transform.position - m_Head.position);
             if (m_GrabBtn != null)
                 m_GrabBtn.Label.text = "Upuść telefon w tym miejscu";
         }
@@ -444,7 +457,8 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_IsDragging && m_Head != null)
             {
-                Vector3 targetPos = m_Head.position + m_Head.forward * m_Distance;
+                // Carried where it was in the view when the drag began, so its handle stays under the gaze.
+                Vector3 targetPos = m_Head.position + m_Head.rotation * m_DragOffset;
                 Quaternion targetRot = Quaternion.LookRotation(targetPos - m_Head.position, Vector3.up);
 
                 transform.position = Vector3.Lerp(transform.position, targetPos, Time.unscaledDeltaTime * 10f);
