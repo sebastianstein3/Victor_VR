@@ -46,6 +46,16 @@ Wi-Fi dla wszystkich urządzeń. Do ekranu iPada: iPad z tym samym Apple ID co M
    Zapisz całą linię. Token jest stały (zapisany na Macu), więc wpisujesz go raz. Bez niego nikt
    inny w sieci Wi-Fi nie zobaczy ekranu. Nowy token: `--new-token`. Terminal zostaw otwarty.
 
+## Krok 2b. Płynny obraz – WebRTC (opcjonalnie, polecane)
+
+Zamiast ~10–20 kl/s (JPEG) ekran leci jako szyfrowane wideo ~30 kl/s.
+
+1. Mac: `pip3 install aiortc numpy` i uruchom serwer ponownie (wypisze „WebRTC: dostępny”).
+2. Unity (raz, przed budowaniem): **Window → Package Manager → + → Add package by name** →
+   `com.unity.webrtc`, wersja `3.0.0-pre.8` → Add. To pakiet w wersji przedpremierowej; jeśli
+   sprawi problemy, usuń go – aplikacja wróci do trybu JPEG.
+3. Bez któregokolwiek z tych kroków wszystko działa dalej w trybie JPEG (okno pokaże, który tryb jest użyty).
+
 ## Krok 3. Wpisz adres Maca do iPhone'a (raz)
 
 1. Na iPhonie otwórz CardboardXR, wejdź do **Spatial Workspace** i stuknij w docku **PC**. Aplikacja

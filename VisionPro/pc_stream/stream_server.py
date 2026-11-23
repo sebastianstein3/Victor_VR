@@ -6,6 +6,8 @@ Serves the screen as JPEG frames on the local network:
     GET  /frame.jpg?app=NAME   only that app's window, so each app can be its own screen in VR
     GET  /windows              the visible app windows, as JSON (for the headset's app list)
     POST /input                clicks and typing from the headset, ONLY with --allow-input
+    POST /offer                WebRTC: smooth, encrypted video instead of JPEG frames (optional:
+                               pip install aiortc numpy; the headset falls back to JPEG without it)
 
 A window is captured from the screen where it is, so it must not be covered by another window:
 place the apps side by side (on a big monitor or a large virtual display, e.g. BetterDisplay on
@@ -189,6 +191,83 @@ def handle_input(event):
             pyautogui.press(key)
 
 
+# ---- WebRTC (optional): the screen or one app's window as a live video track ----
+# aiortc runs on its own asyncio loop in a background thread; the HTTP handler hands it the headset's
+# offer and returns the answer (all ICE candidates included: no trickle, no STUN, local network only).
+# Media is encrypted (DTLS-SRTP), and /offer needs the token like everything else.
+MAX_PEERS = 4
+_rtc = {"loop": None, "peers": set()}
+
+try:
+    import asyncio
+    import fractions  # noqa: F401  (used by aiortc's timestamps)
+    import numpy
+    from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+    from av import VideoFrame
+    HAVE_RTC = True
+except ImportError:
+    HAVE_RTC = False
+
+if HAVE_RTC:
+    class ScreenTrack(VideoStreamTrack):
+        """~30 fps of the main screen or one app's window, at most ARGS.width wide."""
+
+        def __init__(self, app):
+            super().__init__()
+            self.app = app
+            self.sct = None
+
+        def grab(self):
+            if self.sct is None:
+                self.sct = mss.MSS() if hasattr(mss, "MSS") else mss.mss()
+            shot = self.sct.grab(find_region(self.app))
+            image = numpy.frombuffer(shot.rgb, dtype=numpy.uint8).reshape(shot.height, shot.width, 3)
+            frame = VideoFrame.from_ndarray(image, format="rgb24")
+            if frame.width > ARGS.width:
+                height = round(frame.height * ARGS.width / frame.width) // 2 * 2
+                frame = frame.reformat(width=ARGS.width, height=height)
+            return frame
+
+        async def recv(self):
+            pts, time_base = await self.next_timestamp()
+            loop = asyncio.get_running_loop()
+            try:
+                frame = await loop.run_in_executor(None, self.grab)
+            except Exception as error:  # window closed meanwhile: a black frame, not a dead stream
+                print(f"capture error: {error}", file=sys.stderr)
+                frame = VideoFrame.from_ndarray(numpy.zeros((360, 640, 3), dtype=numpy.uint8), format="rgb24")
+            frame.pts, frame.time_base = pts, time_base
+            return frame
+
+    async def answer_offer(sdp, kind, app):
+        if len(_rtc["peers"]) >= MAX_PEERS:
+            raise RuntimeError("too many viewers")
+        peer = RTCPeerConnection()
+        _rtc["peers"].add(peer)
+
+        @peer.on("connectionstatechange")
+        async def on_state():
+            if peer.connectionState in ("failed", "closed", "disconnected"):
+                _rtc["peers"].discard(peer)
+                await peer.close()
+
+        await peer.setRemoteDescription(RTCSessionDescription(sdp=sdp, type=kind))
+        for transceiver in peer.getTransceivers():
+            if transceiver.kind == "video":
+                transceiver.direction = "sendonly"
+                peer.addTrack(ScreenTrack(app))
+                break
+        else:
+            peer.addTrack(ScreenTrack(app))
+        await peer.setLocalDescription(await peer.createAnswer())  # waits for ICE gathering
+        return {"sdp": peer.localDescription.sdp, "type": peer.localDescription.type}
+
+    def start_rtc_loop():
+        loop = asyncio.new_event_loop()
+        threading.Thread(target=loop.run_forever, daemon=True).start()
+        _rtc["loop"] = loop
+
+
 class Handler(BaseHTTPRequestHandler):
     def authorized(self):
         given = self.headers.get("X-CXR-Token", "")
@@ -233,11 +312,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.authorized():
             return
-        if self.path != "/input":
+        if self.path not in ("/input", "/offer"):
             self.send_error(404)
             return
         length = min(int(self.headers.get("Content-Length", 0)), 64 * 1024)
         body = self.rfile.read(length)
+        if self.path == "/offer":
+            self.handle_offer(body)
+            return
         if not ARGS.allow_input:
             self.send_error(403, "view only: start with --allow-input")
             return
@@ -249,6 +331,30 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_response(204)
         self.end_headers()
+
+    def handle_offer(self, body):
+        if not HAVE_RTC:
+            self.send_error(501, "WebRTC not installed on the computer: pip install aiortc numpy")
+            return
+        try:
+            offer = json.loads(body.decode("utf-8"))
+            app = offer.get("app") or None
+            if app is not None and app not in {window["app"] for window in list_windows()}:
+                self.send_error(404, "no such window")
+                return
+            future = asyncio.run_coroutine_threadsafe(
+                answer_offer(str(offer["sdp"]), str(offer.get("type", "offer")), app), _rtc["loop"])
+            answer = future.result(timeout=15)
+        except Exception as error:
+            print(f"offer error: {error}", file=sys.stderr)
+            self.send_error(400)
+            return
+        data = json.dumps(answer).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def log_message(self, *args):  # quiet: one line per frame would flood the terminal
         pass
@@ -275,11 +381,14 @@ def main():
     global TOKEN
     TOKEN = load_token(ARGS.new_token)
 
+    if HAVE_RTC:
+        start_rtc_loop()
     address = local_address()
     server = ThreadingHTTPServer(("0.0.0.0", ARGS.port), Handler)
     print(f"Ekran tego komputera: http://{address}:{ARGS.port}/frame.jpg")
     print(f"Wpisz do iPhone'a, plik Documents/pulpit.txt (jedna linia):  {address}:{ARGS.port} {TOKEN}")
     print("Sterowanie z gogli: " + ("WŁĄCZONE (każdy w tej sieci Wi-Fi może klikać!)" if ARGS.allow_input else "wyłączone (tylko podgląd)"))
+    print("WebRTC (płynny obraz): " + ("dostępny" if HAVE_RTC else "brak (pip install aiortc numpy), działa tryb JPEG"))
     print("Zatrzymanie: Ctrl+C")
     try:
         server.serve_forever()

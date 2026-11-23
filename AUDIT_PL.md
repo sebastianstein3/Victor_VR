@@ -172,3 +172,39 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
     (`SettingsSummoner`), kolidowałoby.
 12. `PassthroughLighting` dla oświetlenia okien jak w pokoju; `ScreenFade` przy otwieraniu/zamykaniu.
 13. Zmierzony profil optyczny Shinecon G10 (patrz pkt 9 w sekcji 2).
+
+## 5. Bezpieczeństwo (przegląd 2026-11-23)
+
+**Sprawdzone zewnętrzne repozytoria (tylko czytane, nic nie uruchomiono):**
+- `justinfincher/webviewtextureios` – **brak licencji** (wszelkie prawa zastrzeżone): kod NIE został
+  użyty; przeglądarka (`CardboardXRBrowser.mm`) to własna implementacja.
+- `google/window-mirror` – Apache-2.0, tylko Windows, ramki JPEG po TCP **bez uwierzytelnienia i
+  szyfrowania**; nic nie przeniesiono (nasz serwer ma token i opcjonalne szyfrowane WebRTC).
+- Moonlight (`moonlight-common-c`) – GPL-3.0, objęłoby licencją całą aplikację: pominięty.
+
+**Serwer ekranu (`VisionPro/pc_stream/stream_server.py`):**
+- Każde żądanie wymaga tokenu (`X-CXR-Token`, ~96 bitów, porównanie w stałym czasie, plik tokenu
+  z uprawnieniami 0600). Przetestowane: bez tokenu 401.
+- Sterowanie (`--allow-input`) domyślnie wyłączone; kliknięcia ograniczone do udostępnianego obszaru,
+  klawisze do krótkiej listy, tekst do 2000 znaków, ciało żądania do 64 KB; aplikacja przywoływana
+  tylko, jeśli ma widoczne okno, a jej nazwa idzie do `osascript` jako argument (brak wstrzyknięcia
+  AppleScript); `pyautogui.FAILSAFE` (mysz w róg = stop).
+- WebRTC: media szyfrowane DTLS-SRTP, `/offer` za tokenem, maks. 4 połączenia, tylko sieć lokalna.
+- **Ryzyko pozostałe:** tryb JPEG i sam token idą po HTTP bez szyfrowania – w obcej/publicznej sieci
+  Wi-Fi ktoś podsłuchujący może przechwycić obraz i token. Używać tylko w sieci domowej.
+
+**Aplikacja na iPhonie:**
+- HTTP dozwolone tylko w sieci lokalnej (ATS `NSAllowsLocalNetworking`, `NSAllowsArbitraryLoads` usuwane
+  przy budowaniu); opis dostępu do sieci lokalnej, mikrofonu i rozpoznawania mowy w Info.plist.
+- Przeglądarka: tylko http(s) (http i tak blokowane przez ATS poza siecią lokalną), blokada `file:`,
+  `javascript:`, `data:`/`blob:` w głównej ramce, `tel:`/`sms:`/linków do aplikacji; brak wyskakujących
+  okien, pobierania plików i mostu JavaScript→aplikacja; tekst do stron kodowany przez JSON; okienka
+  `alert/confirm/prompt` odrzucane. Ciasteczka/logowania trwałe w osobnym magazynie aplikacji.
+- Teksty wpisywane przez użytkownika wyświetlane z `<noparse>` (brak wstrzyknięcia znaczników TMP);
+  JSON do serwera budowany z escapowaniem.
+- **Do świadomości:** `Documents` aplikacji jest udostępniony w Finderze/Plikach (tak skonfigurował
+  autor bazy) – leżą tam `pulpit.txt` (z tokenem), `workspace.json` (treść notatek), klipy. Ktoś z
+  dostępem do odblokowanego iPhone'a lub Maca, z którym jest sparowany, może je odczytać.
+- **Prywatność dyktowania:** domyślnie Apple może przetwarzać mowę na serwerach (lepsza jakość);
+  `VoiceDictation.OnDeviceOnly = true` wymusza rozpoznawanie na telefonie (wymaga pobranego języka).
+- Pobieranie z Google Drive po HTTPS, nazwy plików oczyszczane przez kod bazy (`DriveDownloader`).

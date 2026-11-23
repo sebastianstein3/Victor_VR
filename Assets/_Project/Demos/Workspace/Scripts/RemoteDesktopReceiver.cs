@@ -81,7 +81,11 @@ namespace CardboardXR.Demos.Workspace
                 return;
             }
             SetStatus($"Łączenie z {m_HostAddress}:{m_Port}{(m_App != null ? " (" + m_App + ")" : "")}...");
+#if CXR_WEBRTC
+            StartCoroutine(WebRtcThenFrames());
+#else
             StartCoroutine(PollFrames());
+#endif
         }
 
         // ---- Address ----
@@ -195,6 +199,41 @@ namespace CardboardXR.Demos.Workspace
                 done?.Invoke(apps);
             }
         }
+
+#if CXR_WEBRTC
+        // Smooth, encrypted video when the computer offers it; JPEG frames otherwise or if it drops
+        IEnumerator WebRtcThenFrames()
+        {
+            var rtc = gameObject.AddComponent<WebRtcScreen>();
+            string failure = null;
+            yield return rtc.Connect(Url(""), m_Token, m_App, ShowVideo, error => failure = error);
+            if (rtc.IsConnected)
+            {
+                SetStatus($"{m_App ?? "PC " + m_HostAddress} | WebRTC");
+                while (rtc.IsConnected)
+                    yield return new WaitForSecondsRealtime(1f);
+                failure = "WebRTC rozłączone";
+            }
+            Destroy(rtc);
+            m_IsConnected = false;
+            Debug.Log($"[RemoteDesktop] {failure}; przechodzę na klatki JPEG");
+            yield return PollFrames();
+        }
+
+        void ShowVideo(Texture texture)
+        {
+            if (texture == null)
+                return;
+            m_IsConnected = true;
+            m_ScreenDisplay.texture = texture;
+            float aspect = texture.width / (float)Mathf.Max(1, texture.height);
+            if (!Mathf.Approximately(aspect, m_FrameAspect))
+            {
+                m_FrameAspect = aspect;
+                m_DisplayRect.sizeDelta = FitInside(aspect, VirtualScreen.BodySize);
+            }
+        }
+#endif
 
         // ---- Frames ----
 

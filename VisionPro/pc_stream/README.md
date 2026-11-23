@@ -5,6 +5,9 @@
    pip install mss pillow
    python stream_server.py
    ```
+   Opcjonalnie płynne, szyfrowane wideo (WebRTC): `pip install aiortc numpy` na komputerze i pakiet
+   `com.unity.webrtc` (3.0.0-pre.8) w Unity. Bez nich działa tryb JPEG.
+   Serwer wypisuje linię „adres token” – wpisz ją całą do `pulpit.txt` (token chroni dostęp).
    Do sterowania z gogli (klik z gładzika, pisanie, dyktowanie) doinstaluj `pyautogui pyperclip`
    i uruchom `python stream_server.py --allow-input`.
    macOS: Ustawienia systemowe → Prywatność i ochrona → **Nagrywanie ekranu** (i **Dostępność** dla
