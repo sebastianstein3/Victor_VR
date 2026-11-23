@@ -32,7 +32,7 @@ namespace CardboardXR.Demos.Workspace
         static readonly float[] k_ScreenSlotYaws = { 0f, -46f, -92f, 86f, 132f };
         const float k_ScreenPitch = 3f;
         const float k_ScreenRowPitch = 37f;
-        const float k_PhoneYaw = 50f; // clear of the 9-button dock (~±38 deg) and of the +86 deg slot
+        const float k_PhoneYaw = 54f; // clear of the 10-button dock (~±41 deg) and of the +86 deg slot (from 65 deg)
         const float k_PhoneDistance = 1.25f;
         const float k_DockPitch = -20f;
         const float k_DeskPitch = -38f;
@@ -112,6 +112,8 @@ namespace CardboardXR.Demos.Workspace
             {
                 CreateNewScreen("Główny Notatnik");
                 SpawnPhoneScreen();
+                if (!File.Exists(SaveFile))
+                    OpenTutorial(); // the very first time
             }
 
             // Attach spatial gesture detector
@@ -193,7 +195,7 @@ namespace CardboardXR.Demos.Workspace
             // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
             const float gap = M3Theme.k_TargetGap;
             const float margin = 16f;
-            string[] labels = { "Ekran", "PC", "Aplikacje", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj" };
+            string[] labels = { "Ekran", "PC", "Aplikacje", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj", "?" };
             var widths = new float[labels.Length];
             float total = gap * (labels.Length - 1);
             for (int i = 0; i < labels.Length; i++)
@@ -222,6 +224,7 @@ namespace CardboardXR.Demos.Workspace
             m_CinemaBtn = Add(6, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
             m_DeskBtn = Add(7, "DeskBtn", M3Button.Variant.Tonal, BeginDeskPlacement);
             Add(8, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
+            Add(9, "HelpBtn", M3Button.Variant.Text, OpenTutorial);
 
             WorkspaceSounds.Attach(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
@@ -464,7 +467,7 @@ namespace CardboardXR.Demos.Workspace
             var saved = new SavedWorkspace { phone = m_PhoneScreen != null, locale = m_Voice != null ? m_Voice.Locale : null };
             foreach (var screen in m_Screens)
             {
-                if (screen == null)
+                if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null)
                     continue;
                 saved.screens.Add(new SavedScreen
                 {
@@ -534,6 +537,22 @@ namespace CardboardXR.Demos.Workspace
         {
             if (paused)
                 SaveWorkspace();
+        }
+
+        // The tutorial (Mac and iPad screens) in a window; only one at a time
+        public void OpenTutorial()
+        {
+            foreach (var existing in m_Screens)
+            {
+                if (existing != null && existing.GetComponent<TutorialPanel>() != null)
+                {
+                    SetActiveScreen(existing);
+                    return;
+                }
+            }
+            var screen = CreateNewScreen("Samouczek");
+            if (screen != null)
+                screen.gameObject.AddComponent<TutorialPanel>().Initialize(screen, screen.Rect);
         }
 
         // A screen that lists the computer's apps; the one picked becomes this screen (AppPicker)
@@ -684,6 +703,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "tryb kinowy": case "kino": case "cinema":
                     ToggleCinemaMode();
+                    break;
+                case "pomoc": case "samouczek": case "help": case "tutorial":
+                    OpenTutorial();
                     break;
                 case "aplikacje": case "aplikacja": case "apps":
                     CreateAppScreen();

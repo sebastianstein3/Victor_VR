@@ -10,6 +10,9 @@ Ten samouczek pokazuje, jak zobaczyć w goglach (iPhone 16 Pro + Shinecon G10):
 > iPhonie tylko jedną aplikację naraz, a jego ekran jest zajęty przez gogle. Dlatego aplikacje
 > uruchamia Mac albo iPad, a gogle je pokazują.
 
+**W goglach:** ten samouczek jest też w aplikacji: w Spatial Workspace stuknij w docku **?** albo
+powiedz „pomoc”. Przy pierwszym uruchomieniu Workspace otwiera się sam.
+
 Potrzebujesz: Maca (np. Mac mini), iPhone'a z aplikacją CardboardXR (Spatial Workspace) i jednej sieci
 Wi-Fi dla wszystkich urządzeń. Do ekranu iPada: iPad z tym samym Apple ID co Mac.
 

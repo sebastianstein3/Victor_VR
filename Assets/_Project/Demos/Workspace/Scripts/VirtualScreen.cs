@@ -372,6 +372,8 @@ namespace CardboardXR.Demos.Workspace
                 StopDragging();
         }
 
+        public void Close() => CloseScreen();
+
         void CloseScreen()
         {
             Closed?.Invoke(this);
