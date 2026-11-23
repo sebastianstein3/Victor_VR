@@ -56,6 +56,16 @@ namespace CardboardXR.Demos.Workspace
         M3Button m_CinemaBtn;
         M3Button m_LanguageBtn;
         bool m_GroupDrag; // a held fist is carrying all the windows
+        WorkspaceAnchors m_RoomAnchors;
+        M3Button m_DeskBtn;
+        bool m_PlacingDesk; // "Na blat": the next pinch puts the keyboard on the table being looked at
+
+        // Detected real surfaces: the base project's plane prefab is on layer 30 (StereoBuilder.BoundaryLayer),
+        // with a BoxCollider whose top face is the surface. Only horizontal planes are detected.
+        const int k_SurfaceLayer = 30;
+        const float k_DeskMinBelowEyes = 0.15f; // a table is between 15 and 95 cm below the eyes...
+        const float k_DeskMaxBelowEyes = 0.95f; // ...the floor is farther down
+        const float k_DeskReach = 1.5f;
         bool m_WorkspaceVisible = true;
         AudioListener m_AddedListener;
 
@@ -71,6 +81,8 @@ namespace CardboardXR.Demos.Workspace
             m_Core = core;
             PinchRouter.Handler = this;
             m_HomeYaw = FlatYaw();
+            m_RoomAnchors = gameObject.AddComponent<WorkspaceAnchors>();
+            m_RoomAnchors.Initialize(transform);
 
             // Nothing in the app plays sound, so no scene has an AudioListener, and without one Unity
             // plays nothing: the key and trackpad clicks and the windows' spatial audio would be silent.
@@ -109,6 +121,14 @@ namespace CardboardXR.Demos.Workspace
         {
             if (PinchRouter.Handler == (IPinchHandler)this)
                 PinchRouter.Handler = null;
+
+            // Anchored panels are children of anchors in the Core scene: bring them home first, or they
+            // would outlive the demo
+            if (m_RoomAnchors != null)
+            {
+                m_RoomAnchors.ReleaseAll();
+                Destroy(m_RoomAnchors);
+            }
 
             if (m_Gestures != null)
             {
@@ -163,7 +183,7 @@ namespace CardboardXR.Demos.Workspace
             // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
             const float gap = M3Theme.k_TargetGap;
             const float margin = 16f;
-            string[] labels = { "Monitor", "Pulpit PC", "Telefon", "Głos", "PL", "Kino", "Wyśrodkuj" };
+            string[] labels = { "Monitor", "PC", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj" };
             var widths = new float[labels.Length];
             float total = gap * (labels.Length - 1);
             for (int i = 0; i < labels.Length; i++)
@@ -189,7 +209,8 @@ namespace CardboardXR.Demos.Workspace
             m_VoiceBtn = Add(3, "VoiceBtn", M3Button.Variant.Outlined, ToggleVoiceDictation);
             m_LanguageBtn = Add(4, "LanguageBtn", M3Button.Variant.Text, ToggleDictationLanguage);
             m_CinemaBtn = Add(5, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
-            Add(6, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
+            m_DeskBtn = Add(6, "DeskBtn", M3Button.Variant.Tonal, BeginDeskPlacement);
+            Add(7, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
 
             WorkspaceSounds.Attach(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
@@ -220,13 +241,96 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_Keyboard == null || m_Core == null)
                 return;
+            if (m_PlacingDesk)
+                EndDeskPlacement();
 
             // Brings the keyboard and trackpad back (also after the STOP gesture hid them) under the
             // current heading, each facing the eyes.
             SetDeskVisible(true);
+            if (m_RoomAnchors != null)
+            {
+                m_RoomAnchors.Release(m_Keyboard.transform);
+                if (m_Trackpad != null)
+                    m_RoomAnchors.Release(m_Trackpad.transform);
+            }
             WorldUi.PlaceInFront((RectTransform)m_Keyboard.transform, m_Core.Head, k_KeyboardDistance, k_DeskPitch, 0f);
             if (m_Trackpad != null)
                 WorldUi.PlaceInFront((RectTransform)m_Trackpad.transform, m_Core.Head, k_KeyboardDistance, k_DeskPitch, k_TrackpadYaw);
+        }
+
+        // ---- "Na blat": the keyboard and trackpad lie flat on a real, detected table ----
+        // Then the fingertip taps the table itself: it stops the finger (real "haptics"), and a tap is
+        // the fingertip coming within 3.5 cm of the keyboard plane, which now is the table top.
+
+        void BeginDeskPlacement()
+        {
+            if (m_Keyboard == null)
+                return;
+            m_PlacingDesk = true;
+            // Hidden while choosing, so a pinch at the table can't land on a floating key instead
+            SetDeskVisible(false);
+            if (m_DeskBtn != null)
+            {
+                m_DeskBtn.Text = "Wskaż stół";
+                m_DeskBtn.Selected = true;
+            }
+        }
+
+        void EndDeskPlacement()
+        {
+            m_PlacingDesk = false;
+            if (m_DeskBtn != null)
+            {
+                m_DeskBtn.Text = "Na blat";
+                m_DeskBtn.Selected = false;
+            }
+        }
+
+        // The table under the gaze, if there is a detected one at desk height within reach.
+        bool TryFindDesk(out Vector3 point)
+        {
+            point = default;
+            var head = m_Core.Head;
+            if (!Physics.Raycast(head.position, head.forward, out var hit, k_DeskReach, 1 << k_SurfaceLayer,
+                    QueryTriggerInteraction.Ignore))
+                return false;
+            float below = head.position.y - hit.point.y;
+            if (hit.normal.y < 0.9f || below < k_DeskMinBelowEyes || below > k_DeskMaxBelowEyes)
+                return false;
+            point = hit.point;
+            return true;
+        }
+
+        void PlaceDeskAtGaze()
+        {
+            EndDeskPlacement();
+            if (!TryFindDesk(out var point))
+            {
+                ResetDeskPosition(); // back to floating in front
+                if (m_ActiveScreen != null)
+                    m_ActiveScreen.AppendText("\n[Nie znaleziono stołu: rozejrzyj się chwilę po blacie, by go wykryć, i spróbuj ponownie]\n");
+                return;
+            }
+
+            SetDeskVisible(true);
+            var keyboard = (RectTransform)m_Keyboard.transform;
+            m_RoomAnchors?.Release(keyboard);
+            // Flat, readable from above: the canvas faces down into the table (+Z), its top row away from the user
+            Vector3 forward = FlatYaw() * Vector3.forward;
+            Vector3 right = Vector3.Cross(Vector3.up, forward);
+            Quaternion flat = Quaternion.LookRotation(Vector3.down, forward);
+            Vector3 lift = Vector3.up * 0.004f; // just above the plane's own mesh
+            keyboard.SetPositionAndRotation(point + lift, flat);
+
+            if (m_Trackpad != null)
+            {
+                var pad = (RectTransform)m_Trackpad.transform;
+                m_RoomAnchors?.Release(pad);
+                float keyboardHalf = keyboard.rect.width * keyboard.lossyScale.x / 2f;
+                float padHalf = pad.rect.width * pad.lossyScale.x / 2f;
+                pad.SetPositionAndRotation(point + lift + right * (keyboardHalf + 0.03f + padHalf), flat);
+            }
+            Debug.Log($"[Workspace] Klawiatura na blacie {m_Core.Head.position.y - point.y:F2} m pod oczami");
         }
 
         // Like holding the Digital Crown on Vision Pro: everything comes back around where the user now
@@ -260,6 +364,8 @@ namespace CardboardXR.Demos.Workspace
         // Puts a panel at yaw/pitch degrees from the demo's home heading, facing the head.
         void PlaceAround(Transform panel, float distance, float yawDegrees, float pitchDegrees)
         {
+            if (m_RoomAnchors != null)
+                m_RoomAnchors.Release(panel);
             Vector3 position = m_Core.Head.position +
                                m_HomeYaw * Quaternion.Euler(-pitchDegrees, yawDegrees, 0f) * Vector3.forward * distance;
             panel.SetPositionAndRotation(position, Quaternion.LookRotation(position - m_Core.Head.position, Vector3.up));
@@ -452,6 +558,11 @@ namespace CardboardXR.Demos.Workspace
                 case "reset biurka": case "klawiatura": case "keyboard":
                     ResetDeskPosition();
                     break;
+                case "na blat": case "na biurko": case "na stół": case "desk":
+                    // Spoken while looking at the table: place right away
+                    m_PlacingDesk = true;
+                    PlaceDeskAtGaze();
+                    break;
                 case "wyśrodkuj": case "wyśrodkuj wszystko": case "recenter":
                     RecenterAll();
                     break;
@@ -620,10 +731,29 @@ namespace CardboardXR.Demos.Workspace
                 m_Trackpad.gameObject.SetActive(visible);
         }
 
+        // Still panels are anchored in the room; moving ones let go of their anchor (WorkspaceAnchors)
+        void UpdateRoomAnchors()
+        {
+            if (m_RoomAnchors == null)
+                return;
+            foreach (var screen in m_Screens)
+            {
+                if (screen != null)
+                    m_RoomAnchors.Keep(screen.transform, screen.IsDragging);
+            }
+            if (m_PhoneScreen != null)
+                m_RoomAnchors.Keep(m_PhoneScreen.transform, m_PhoneScreen.IsDragging);
+            if (m_Keyboard != null && m_Keyboard.gameObject.activeSelf)
+                m_RoomAnchors.Keep(m_Keyboard.transform, false);
+            if (m_Trackpad != null && m_Trackpad.gameObject.activeSelf)
+                m_RoomAnchors.Keep(m_Trackpad.transform, false);
+        }
+
         // Support for physical Bluetooth Keyboard & Mouse paired with iPhone 16 Pro
         void Update()
         {
             UpdateHeldPose();
+            UpdateRoomAnchors();
 
             // 1. Physical Bluetooth Keyboard Input
             var kb = Keyboard.current;
@@ -665,6 +795,12 @@ namespace CardboardXR.Demos.Workspace
         // IPinchHandler: allows grabbing and repositioning virtual screens in 3D space
         public bool TryBeginPinch(GameObject gazeTarget, PinchSource source)
         {
+            if (m_PlacingDesk)
+            {
+                PlaceDeskAtGaze();
+                return true;
+            }
+
             // Something is being carried (started with its grab button): a pinch anywhere puts it down.
             // (A pinch on a button is routed to the button first, PinchRouter.Order, so this is a pinch
             // at the window itself or at the room.)

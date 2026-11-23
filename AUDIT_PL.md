@@ -119,10 +119,16 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
 ## 4. Możliwości rozbudowy (priorytety)
 
 **Wysoki – realna wartość, w zasięgu:**
-1. **Klawiatura na prawdziwym blacie.** Bazowy `RoomBoundary` (+ `ScanSurfaces`) wykrywa stoły,
+1. ~~**Klawiatura na prawdziwym blacie**~~ **zrobione**: przycisk „Na blat” w docku (albo komenda
+   „na blat” wypowiedziana patrząc na stół), potem uszczypnięcie z wzrokiem na stole: klawiatura i
+   gładzik kładą się płasko na wykrytym blacie (15–95 cm pod oczami), więc palec stuka w prawdziwy
+   stół. Skan pokoju (`ScanSurfaces`) znów włączony; stół musi zostać wykryty (rozejrzyj się po nim).
+   Pierwotny opis: Bazowy `RoomBoundary` (+ `ScanSurfaces`) wykrywa stoły,
    `AnchorPlacer` przypina obiekty do pokoju, a `DepthSampler` (LiDAR) mierzy głębię pod palcem. Położenie
    klawiatury płasko na wykrytym blacie dałoby prawdziwy „opór” stołu i lepsze wykrywanie stuknięć.
-2. **Okna przypięte do pokoju** (kotwice ARKit przez `AnchorPlacer`) zamiast względem głowy przy starcie;
+2. ~~**Okna przypięte do pokoju**~~ **zrobione (w trakcie działania)**: `WorkspaceAnchors` – każde
+   nieruchome okno, telefon, klawiatura i gładzik ma kotwicę ARKit; przenoszone puszczają ją i dostają
+   nową po odłożeniu. Zostało: zapis układu między uruchomieniami (ARWorldMap). Pierwotny opis: (kotwice ARKit przez `AnchorPlacer`) zamiast względem głowy przy starcie;
    później zapis układu między uruchomieniami (dziś baza nie ma trwałości kotwic: PlayerPrefs + ARWorldMap).
 3. ~~**Prawdziwe wideo w telefonie**~~ **zrobione (telefon)**: filmy z folderu `Documents/Klipy` na iPhonie
    (kopiuj przez Finder lub aplikację Pliki; .mp4/.mov/.m4v, najlepiej pionowe) grają w TikTok/Shorts/

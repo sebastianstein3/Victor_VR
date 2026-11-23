@@ -9,7 +9,9 @@
         "UnityEngine.UI",
         "CardboardXR.UI",
         "Unity.TextMeshPro",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

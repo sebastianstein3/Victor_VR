@@ -35,6 +35,9 @@ Zacznij od przeczytania `AUDIT_PL.md` (stan prac, co naprawiono, co zostało) i 
 - Kliknięcie przycisku ma w `PinchRouter` pierwszeństwo przed `IPinchHandler`, a wzrok trafia w dziecko
   „Container” przycisku – nie wykrywaj przycisków po nazwie w `TryBeginPinch`.
 - Kamera widzi dłonie tylko ±21° w pionie od kierunku głowy (`KNOWN_ISSUES.md`).
+- Panele w pokoju trzymają kotwice ARKit (`WorkspaceAnchors`): przed przesunięciem panelu z kodu wołaj
+  `Release`, a przy wyjściu z dema `ReleaseAll` przed niszczeniem paneli (kotwice są w scenie Core).
+- Wykryte powierzchnie: warstwa 30, tylko poziome, collider z górną ścianą = blat.
 - Czcionka UI (Roboto) nie ma emoji ani `⌫ ⇧ ↵ ─`: używaj zwykłego tekstu / ikon z `M3Icons`.
 - Komponenty dodane na `gameObject` dema niszcz przez `Destroy(komponent)`, nie `.gameObject`.
 - Nic w projekcie nie miało dźwięku: `WorkspaceDemo` dodaje `AudioListener` na głowie. Dźwięki przycisków
