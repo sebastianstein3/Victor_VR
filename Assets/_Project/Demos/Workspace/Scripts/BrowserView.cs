@@ -41,7 +41,8 @@ namespace CardboardXR.Demos.Workspace
         Texture2D m_Texture;
         byte[] m_Buffer;
         GCHandle m_BufferHandle;
-        TextMeshProUGUI m_Status;
+        float m_StatusUntil; // a message is in the header until then (SetStatus)
+        const float k_StatusSeconds = 2.5f;
         M3Button m_AddressBtn;
         int m_Id;
         float m_NextFrame;
@@ -86,10 +87,6 @@ namespace CardboardXR.Demos.Workspace
             VirtualScreen.PinTo(m_Progress, new Vector2(0f, 1f), new Vector2(30f, -82f));
             m_Progress.gameObject.SetActive(false);
 
-            m_Status = M3.Text("BrowserStatus", canvas, "", M3Theme.Type.BodyMedium,
-                VirtualScreen.BodyCenter + new Vector2(0f, -VirtualScreen.BodySize.y / 2f + 14f),
-                new Vector2(VirtualScreen.BodySize.x, 20f), new Color(0.15f, 0.15f, 0.2f), TextAlignmentOptions.Center);
-            VirtualScreen.AttachToBodyBottom(m_Status.rectTransform, 14f, 20f);
 
             // Footer: back, forward, reload (left), the window's own - / + (middle), address (right)
             float y = VirtualScreen.FooterY;
@@ -110,14 +107,18 @@ namespace CardboardXR.Demos.Workspace
 
 #if UNITY_IOS && !UNITY_EDITOR
             EnsureReceiver();
-            m_Id = CardboardXR_BrowserCreate(k_TextureWidth, k_TextureHeight, m_Private ? 1 : 0);
+            // The page as big as the window's text area, 2 px per dp
+            var area = m_Screen.BodySizeNow;
+            m_TextureWidth = Mathf.Clamp(Mathf.RoundToInt(area.x * 2f), 64, 2048);
+            m_TextureHeight = Mathf.Clamp(Mathf.RoundToInt(area.y * 2f), 64, 2048);
+            m_Id = CardboardXR_BrowserCreate(m_TextureWidth, m_TextureHeight, m_Private ? 1 : 0);
             if (m_Id == 0)
             {
                 SetStatus("Nie udało się uruchomić przeglądarki");
                 return;
             }
             s_Views[m_Id] = this;
-            m_Texture = new Texture2D(k_TextureWidth, k_TextureHeight, TextureFormat.RGBA32, false);
+            m_Texture = new Texture2D(m_TextureWidth, m_TextureHeight, TextureFormat.RGBA32, false);
             m_Texture.Apply(false); // makes the GPU texture
             m_Page.texture = m_Texture;
             // Metal: the native side writes frames into the texture itself. Otherwise through a buffer.
@@ -128,7 +129,7 @@ namespace CardboardXR.Demos.Workspace
             }
             else
             {
-                m_Buffer = new byte[k_TextureWidth * k_TextureHeight * 4];
+                m_Buffer = new byte[m_TextureWidth * m_TextureHeight * 4];
                 m_BufferHandle = GCHandle.Alloc(m_Buffer, GCHandleType.Pinned);
             }
             if (m_Private)
@@ -136,7 +137,7 @@ namespace CardboardXR.Demos.Workspace
             Navigate(string.IsNullOrEmpty(url) ? k_HomePage : url);
 #else
             m_Page.color = new Color(0.9f, 0.9f, 0.92f);
-            SetStatus("Przeglądarka działa tylko na iPhonie (iOS)");
+            SetStatus("Przeglądarka działa tylko na iPhonie (iOS)", sticky: true);
 #endif
         }
 
@@ -280,6 +281,8 @@ namespace CardboardXR.Demos.Workspace
 #if UNITY_IOS && !UNITY_EDITOR
             if (m_Id == 0)
                 return;
+            if (m_StatusUntil > 0f && Time.unscaledTime > m_StatusUntil)
+                ShowHost();
             UpdateProgress(CardboardXR_BrowserProgress(m_Id));
             if (m_ResizePending && Time.unscaledTime >= m_ResizeAt && !m_Screen.IsStretching)
                 ApplyTextureSize();
@@ -361,6 +364,17 @@ namespace CardboardXR.Demos.Workspace
             }
         }
 
+        // Desktop or mobile version of sites, like Safari's "Request Desktop Website":
+        // 0 auto (desktop for sites that need it, e.g. Messenger, and for windows 900+ dp wide), 1 desktop, 2 mobile
+        public void SetDesktopMode(int mode)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            if (m_Id != 0)
+                CardboardXR_BrowserSetDesktopMode(m_Id, mode);
+#endif
+            SetStatus(mode == 1 ? "Wersja na komputer" : mode == 2 ? "Wersja mobilna" : "Wersja automatyczna");
+        }
+
         // "Aa": 100 -> 125 -> 150 -> 175 -> 200 -> 75 -> 100 %
         static readonly float[] k_TextSizes = { 1f, 1.25f, 1.5f, 1.75f, 2f, 0.75f };
 
@@ -403,8 +417,6 @@ namespace CardboardXR.Demos.Workspace
             m_Url = state.url ?? "";
             m_Title = state.title ?? "";
             m_Secure = state.secure;
-            string name = string.IsNullOrEmpty(m_Title) ? "Przeglądarka" : m_Title;
-            m_Screen.SetTitle(m_Private ? "[Prywatna] " + name : name);
             if (!m_AddressMode)
                 ShowHost();
         }
@@ -412,30 +424,40 @@ namespace CardboardXR.Demos.Workspace
         void ShowAddressOrState()
         {
             if (m_AddressMode)
-                SetStatus("Adres: " + m_Address + "|");
+                SetStatus("Adres: " + m_Address + "|", sticky: true);
             else
                 ShowHost();
         }
 
-        // The real host, as current browsers show it (a title can say anything): against lookalike
-        // pages. Green when the page and everything on it came over https.
+        // The header shows the real host first, as current browsers do in their address bar (a page's
+        // title can say anything): against lookalike pages. Green "Szyfrowane" when the page and
+        // everything on it came over https, red otherwise. Nothing is drawn over the page itself.
         void ShowHost()
         {
+            m_StatusUntil = 0f;
+            string name = string.IsNullOrEmpty(m_Title) ? "Przeglądarka" : m_Title;
+            if (m_Private)
+                name = "[Prywatna] " + name;
             string host = Uri.TryCreate(m_Url, UriKind.Absolute, out var uri) ? uri.Host : "";
             if (string.IsNullOrEmpty(host))
             {
-                SetStatus("");
+                m_Screen.SetTitle(name);
                 return;
             }
-            if (m_Status != null)
-                m_Status.color = m_Secure ? new Color(0.1f, 0.5f, 0.2f) : new Color(0.75f, 0.2f, 0.1f);
-            SetStatus((m_Secure ? "Szyfrowane · " : "NIESZYFROWANE · ") + host);
+            string mark = m_Secure ? "<color=#5AC878>Szyfrowane</color> · " : "<color=#E65A46>NIESZYFROWANE</color> · ";
+            m_Screen.SetTitle(host + " — " + name, mark);
         }
 
-        void SetStatus(string text)
+        // A short message in the header (loading, text size, address), then the host again
+        void SetStatus(string text, bool sticky = false)
         {
-            if (m_Status != null)
-                m_Status.text = "<noparse>" + text.Replace("</noparse>", "") + "</noparse>";
+            if (string.IsNullOrEmpty(text))
+            {
+                ShowHost();
+                return;
+            }
+            m_Screen.SetTitle(text);
+            m_StatusUntil = sticky ? float.PositiveInfinity : Time.unscaledTime + k_StatusSeconds;
         }
 
         void OnDestroy()
@@ -480,6 +502,7 @@ namespace CardboardXR.Demos.Workspace
         [DllImport("__Internal")] static extern float CardboardXR_BrowserProgress(int id);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserSetZoom(int id, float zoom);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserResize(int id, int width, int height);
+        [DllImport("__Internal")] static extern void CardboardXR_BrowserSetDesktopMode(int id, int mode);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserDestroy(int id);
         [DllImport("__Internal")] static extern int CardboardXR_BrowserLoad(int id, string url);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserGoBack(int id);

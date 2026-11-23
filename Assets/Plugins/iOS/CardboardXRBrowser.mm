@@ -54,7 +54,20 @@ static BOOL s_RulesCompiling;
 @property (nonatomic, weak) id<MTLTexture> texture; // Unity's; not owned (C# clears it before freeing)
 @property (nonatomic) BOOL hasNewFrame;
 @property (nonatomic) BOOL snapshotting;
+@property (nonatomic) int desktopMode; // 0 auto, 1 always the desktop site, 2 always the mobile site
 @end
+
+// Sites that only work as desktop sites (their mobile pages send you to the app instead)
+static BOOL NeedsDesktopSite(NSString* host)
+{
+    host = host.lowercaseString;
+    for (NSString* site in @[@"messenger.com", @"web.whatsapp.com", @"facebook.com"])
+    {
+        if ([host isEqualToString:site] || [host hasSuffix:[@"." stringByAppendingString:site]])
+            return YES;
+    }
+    return NO;
+}
 
 static NSMutableDictionary<NSNumber*, CXRBrowser*>* s_Browsers;
 static int s_NextId = 1;
@@ -125,17 +138,30 @@ static void CompileRulesOnce()
     free(_pixels);
 }
 
+// Like Safari's "Request Desktop Website": the desktop site when asked, for sites that need it, and
+// (auto) when the window is wide (900+ points, as wide as a laptop browser window)
+- (BOOL)wantsDesktopSiteFor:(NSURL*)url
+{
+    if (_desktopMode == 1)
+        return YES;
+    if (_desktopMode == 2)
+        return NO;
+    return NeedsDesktopSite(url.host ?: @"") || _webView.bounds.size.width >= 900;
+}
+
 - (void)webView:(WKWebView*)webView decidePolicyForNavigationAction:(WKNavigationAction*)action
-    decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
+    preferences:(WKWebpagePreferences*)preferences
+    decisionHandler:(void (^)(WKNavigationActionPolicy, WKWebpagePreferences*))decisionHandler
 {
     NSURL* url = action.request.URL;
+    preferences.preferredContentMode = [self wantsDesktopSiteFor:url] ? WKContentModeDesktop : WKContentModeMobile;
     BOOL allowed = IsAllowedURL(url);
     if (!allowed && action.targetFrame != nil && !action.targetFrame.isMainFrame)
     {
         NSString* scheme = url.scheme.lowercaseString;
         allowed = [scheme isEqualToString:@"about"] || [scheme isEqualToString:@"blob"] || [scheme isEqualToString:@"data"];
     }
-    decisionHandler(allowed ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel);
+    decisionHandler(allowed ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel, preferences);
 }
 
 - (void)webView:(WKWebView*)webView decidePolicyForNavigationResponse:(WKNavigationResponse*)response
@@ -328,9 +354,25 @@ extern "C" void CardboardXR_BrowserResize(int identifier, int width, int height)
     }
     free(browser.pixels);
     browser.pixels = NULL;
+    NSURL* current = browser.webView.URL;
+    BOOL wasDesktop = current != nil && [browser wantsDesktopSiteFor:current];
     browser.width = width;
     browser.height = height;
     browser.webView.frame = CGRectMake(0, 0, width / 2.0, height / 2.0);
+    // Stretched past (or back under) the desktop width: load the other version of the page
+    if (current != nil && [browser wantsDesktopSiteFor:current] != wasDesktop)
+        [browser.webView reload];
+}
+
+// 0 auto, 1 desktop site, 2 mobile site; reloads the page in the chosen version
+extern "C" void CardboardXR_BrowserSetDesktopMode(int identifier, int mode)
+{
+    CXRBrowser* browser = Find(identifier);
+    if (browser == nil || mode < 0 || mode > 2)
+        return;
+    browser.desktopMode = mode;
+    if (browser.webView.URL != nil)
+        [browser.webView reload];
 }
 
 // Unity's texture (Texture2D.GetNativeTexturePtr, Metal) to write frames into; NULL to stop.

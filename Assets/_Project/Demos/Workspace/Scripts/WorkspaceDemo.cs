@@ -754,6 +754,18 @@ namespace CardboardXR.Demos.Workspace
                     if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
                         m_ActiveScreen.Browser.ZoomBy(0.8f);
                     break;
+                case "wersja komputerowa": case "wersja na komputer": case "desktop site":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.SetDesktopMode(1);
+                    break;
+                case "wersja mobilna": case "mobile site":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.SetDesktopMode(2);
+                    break;
+                case "wersja automatyczna":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.SetDesktopMode(0);
+                    break;
                 case "wstecz": case "back":
                     if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
                         m_ActiveScreen.Browser.GoBack();

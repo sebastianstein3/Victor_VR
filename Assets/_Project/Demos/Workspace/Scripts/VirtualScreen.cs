@@ -118,11 +118,13 @@ namespace CardboardXR.Demos.Workspace
         // The computer's main screen (app null) or one app's window on it (RemoteDesktopReceiver)
         public string RemoteApp => m_Remote != null ? m_Remote.App : null;
 
-        public void SetTitle(string title)
+        // richPrefix: trusted markup from the app itself (e.g. the browser's coloured "Szyfrowane"), shown
+        // before the title; the title is always shown literally
+        public void SetTitle(string title, string richPrefix = null)
         {
             Title = title;
             if (m_TitleText != null)
-                m_TitleText.text = "<noparse>" + title + "</noparse>";
+                m_TitleText.text = (richPrefix ?? "") + "<noparse>" + (title ?? "").Replace("</noparse>", "") + "</noparse>";
         }
 
         // Hides or shows the notes text (the app list and the PC picture use the same area)
@@ -364,10 +366,16 @@ namespace CardboardXR.Demos.Workspace
         public bool IsBrowser => m_Browser != null;
         public BrowserView Browser => m_Browser;
 
+        // A browser window's default size: 760 x 640 dp, a 700 x 420 page (about an iPad mini held
+        // sideways). The 520 x 440 default gave a 460 x 220 page: tested on real sites, it showed little
+        // more than their headers. Kept if the window is already bigger (restored or stretched).
+        public static Vector2 BrowserLayoutSize => new(760f, 640f);
+
         public void EnableBrowser(string url = null, bool privateMode = false)
         {
             if (m_Browser != null)
                 return;
+            SetLayoutSize(Vector2.Max(LayoutSize, BrowserLayoutSize));
             SetTitle(privateMode ? "Prywatna przeglądarka" : "Przeglądarka");
             m_Browser = gameObject.AddComponent<BrowserView>();
             m_Browser.Initialize(this, m_CanvasRect, m_Head, url, privateMode);
