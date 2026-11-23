@@ -54,6 +54,8 @@ namespace CardboardXR.Demos.Workspace
         SpatialGestureDetector m_Gestures;
         M3Button m_VoiceBtn;
         M3Button m_CinemaBtn;
+        M3Button m_LanguageBtn;
+        bool m_GroupDrag; // a held fist is carrying all the windows
         bool m_WorkspaceVisible = true;
         AudioListener m_AddedListener;
 
@@ -161,7 +163,7 @@ namespace CardboardXR.Demos.Workspace
             // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
             const float gap = M3Theme.k_TargetGap;
             const float margin = 16f;
-            string[] labels = { "Monitor", "Pulpit PC", "Telefon", "Głos", "Kino", "Reset biurka" };
+            string[] labels = { "Monitor", "Pulpit PC", "Telefon", "Głos", "PL", "Kino", "Reset biurka" };
             var widths = new float[labels.Length];
             float total = gap * (labels.Length - 1);
             for (int i = 0; i < labels.Length; i++)
@@ -185,8 +187,9 @@ namespace CardboardXR.Demos.Workspace
             Add(1, "PcScreenBtn", M3Button.Variant.Tonal, CreatePcDesktopScreen);
             Add(2, "NewPhoneBtn", M3Button.Variant.Filled, SpawnPhoneScreen);
             m_VoiceBtn = Add(3, "VoiceBtn", M3Button.Variant.Outlined, ToggleVoiceDictation);
-            m_CinemaBtn = Add(4, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
-            Add(5, "ResetDeskBtn", M3Button.Variant.Tonal, ResetDeskPosition);
+            m_LanguageBtn = Add(4, "LanguageBtn", M3Button.Variant.Text, ToggleDictationLanguage);
+            m_CinemaBtn = Add(5, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
+            Add(6, "ResetDeskBtn", M3Button.Variant.Tonal, ResetDeskPosition);
 
             WorkspaceSounds.Attach(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
@@ -358,6 +361,17 @@ namespace CardboardXR.Demos.Workspace
             }
         }
 
+        // Dictation language: Polish or English (the button shows the current one)
+        void ToggleDictationLanguage()
+        {
+            if (m_Voice == null || m_Voice.IsRecording)
+                return;
+            bool english = m_Voice.Locale == "en-US";
+            m_Voice.Locale = english ? VoiceDictation.k_DefaultLocale : "en-US";
+            if (m_LanguageBtn != null)
+                m_LanguageBtn.Text = english ? "PL" : "EN";
+        }
+
         void ToggleVoiceDictation()
         {
             if (m_Voice != null)
@@ -367,6 +381,8 @@ namespace CardboardXR.Demos.Workspace
         void OnSpeechRecognized(string transcribedText)
         {
             if (string.IsNullOrWhiteSpace(transcribedText))
+                return;
+            if (!VoiceDictation.IsMock && TryVoiceCommand(transcribedText))
                 return;
 
             // Outside iOS nothing is recognized (a canned sentence comes back), so say so in the text.
@@ -384,6 +400,41 @@ namespace CardboardXR.Demos.Workspace
                 bool atLineStart = string.IsNullOrEmpty(text) || text.EndsWith("\n");
                 m_ActiveScreen.AppendText((atLineStart ? "" : " ") + transcribedText);
             }
+        }
+
+        // Voice commands. Only a whole utterance that is just the command counts (said on its own), so
+        // the same words inside a dictated sentence are typed as usual.
+        bool TryVoiceCommand(string spoken)
+        {
+            string command = spoken.Trim().TrimEnd('.', '!', '?', ',').ToLowerInvariant();
+            switch (command)
+            {
+                case "nowy ekran": case "nowy monitor": case "new screen":
+                    CreateNewScreen($"Ekran {m_Screens.Count + 1}");
+                    break;
+                case "wyczyść": case "wyczyść ekran": case "clear":
+                    ClearActiveScreen();
+                    break;
+                case "tryb kinowy": case "kino": case "cinema":
+                    ToggleCinemaMode();
+                    break;
+                case "telefon": case "smartfon": case "phone":
+                    SpawnPhoneScreen();
+                    break;
+                case "reset biurka": case "klawiatura": case "keyboard":
+                    ResetDeskPosition();
+                    break;
+                case "następny ekran": case "next screen":
+                    SelectNextScreen();
+                    break;
+                case "poprzedni ekran": case "previous screen":
+                    SelectPrevScreen();
+                    break;
+                default:
+                    return false;
+            }
+            Debug.Log($"[Workspace] Komenda głosowa: {command}");
+            return true;
         }
 
         void OnVoiceFailed(string message)
@@ -433,6 +484,9 @@ namespace CardboardXR.Demos.Workspace
 
         void OnHandPoseChanged(HandPose pose)
         {
+            if (m_GroupDrag && pose != HandPose.Fist)
+                SetGroupDrag(false);
+
             m_HeldPose = pose;
             m_HeldPoseSince = Time.unscaledTime;
             m_HeldPoseHandled = false;
@@ -452,6 +506,10 @@ namespace CardboardXR.Demos.Workspace
                     m_ActiveScreen.AppendText("\n[Zatwierdzono]");
                     Debug.Log("[Workspace] Gest: ThumbsUp -> Dodano potwierdzenie");
                 }
+            }
+            else if (m_HeldPose == HandPose.Fist)
+            {
+                SetGroupDrag(true);
             }
             else if (m_HeldPose == HandPose.OpenPalmForward)
             {
@@ -496,6 +554,26 @@ namespace CardboardXR.Demos.Workspace
             int idx = m_Screens.IndexOf(m_ActiveScreen);
             int prevIdx = (idx - 1 + m_Screens.Count) % m_Screens.Count;
             SetActiveScreen(m_Screens[prevIdx]);
+        }
+
+        // Every window and the phone follow the head (each keeps its place in the view, like a single
+        // drag), so the whole layout can be turned to face another way.
+        void SetGroupDrag(bool on)
+        {
+            m_GroupDrag = on;
+            foreach (var screen in m_Screens)
+            {
+                if (screen == null)
+                    continue;
+                if (on) screen.StartDragging();
+                else screen.StopDragging();
+            }
+            if (m_PhoneScreen != null)
+            {
+                if (on) m_PhoneScreen.StartDragging();
+                else m_PhoneScreen.StopDragging();
+            }
+            Debug.Log($"[Workspace] Gest pięści: przenoszenie całego układu {(on ? "start" : "koniec")}");
         }
 
         void ToggleWorkspaceVisibility() => SetDeskVisible(!m_WorkspaceVisible);

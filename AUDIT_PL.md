@@ -140,9 +140,12 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
 8. WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
 9. Dźwięk przestrzenny okien: `AudioSource` są, ale nic nie gra – podpiąć wideo/pulpit.
 10. Dyktowanie: ~~podgląd na żywo~~ **zrobione** (przycisk „Głos” pokazuje koniec usłyszanego tekstu);
-    zostały: wybór języka w docku, komendy głosowe („nowy ekran”, „wyczyść”).
+    ~~wybór języka~~ i ~~komendy głosowe~~ **zrobione**: przycisk PL/EN w docku; samo zdanie-komenda
+    (bez innych słów) wykonuje akcję zamiast się wpisać: „nowy ekran”, „wyczyść”, „kino”, „telefon”,
+    „reset biurka”, „następny/poprzedni ekran” (i odpowiedniki EN). Tylko na iOS (nie w atrapie).
 
 **Niski / eksperymenty:**
-11. Gesty: pięść = „chwyć wszystkie okna”, dłoń do siebie = menu na nadgarstku (detektor już to rozpoznaje).
+11. Gesty: ~~pięść = przenieś wszystkie okna~~ **zrobione** (trzymaj pięść 0,5 s, obracaj głową, otwórz
+    dłoń, aby odłożyć; przypięte okna zostają). Zostało: dłoń do siebie = menu na nadgarstku.
 12. `PassthroughLighting` dla oświetlenia okien jak w pokoju; `ScreenFade` przy otwieraniu/zamykaniu.
 13. Zmierzony profil optyczny Shinecon G10 (patrz pkt 9 w sekcji 2).
