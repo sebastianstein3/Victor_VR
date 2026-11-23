@@ -686,6 +686,7 @@ namespace CardboardXR.Demos.Workspace
                 new("Czytnik PDF", OpenPdfPicker),
                 new("Środowisko", OpenEnvironmentPicker),
                 new("Modele 3D", OpenModelPicker),
+                new("Zdjęcia 3D", OpenSpatialPicker),
             };
             choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
@@ -708,6 +709,27 @@ namespace CardboardXR.Demos.Workspace
             }
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Wybierz PDF", choices,
                 "Brak plików PDF. Wrzuć je do folderu PDF aplikacji: Finder > iPhone > Pliki > CardboardXR, albo aplikacja Pliki.",
+                closeOnPick: false);
+        }
+
+        // ---- Spatial photos and videos (iPhone 15 Pro / 16 Pro) ----
+        public void OpenSpatialPicker()
+        {
+            var screen = CreateNewScreen("Zdjęcia 3D");
+            if (screen == null)
+                return;
+            var files = SpatialMediaView.FindFiles();
+            var choices = new List<ChoiceList.Choice>();
+            for (int i = 0; i < files.Count; i++)
+            {
+                int index = i;
+                string name = System.IO.Path.GetFileNameWithoutExtension(files[i]);
+                if (name.Length > 26)
+                    name = name.Substring(0, 25) + "…";
+                choices.Add(new ChoiceList.Choice(name, () => screen.gameObject.AddComponent<SpatialMediaView>().Initialize(screen, files, index)));
+            }
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Zdjęcia i filmy 3D", choices,
+                "Brak plików. Wrzuć zdjęcia przestrzenne (.heic) i filmy przestrzenne (.mov) z iPhone'a do folderu Przestrzenne aplikacji (Finder lub Pliki). Zdjęcia obok siebie: .jpg z _sbs w nazwie.",
                 closeOnPick: false);
         }
 
@@ -957,11 +979,16 @@ namespace CardboardXR.Demos.Workspace
                 case "tryb kinowy": case "kino": case "cinema":
                     ToggleCinemaMode();
                     break;
-                case "następna strona": case "dalej": case "next page":
+                case "następna strona": case "dalej": case "next page": case "następne": case "następne zdjęcie":
                     m_ActiveScreen?.GetComponent<PdfView>()?.NextPage();
+                    m_ActiveScreen?.GetComponent<SpatialMediaView>()?.Next();
                     break;
-                case "poprzednia strona": case "previous page":
+                case "poprzednia strona": case "previous page": case "poprzednie": case "poprzednie zdjęcie":
                     m_ActiveScreen?.GetComponent<PdfView>()?.PreviousPage();
+                    m_ActiveScreen?.GetComponent<SpatialMediaView>()?.Previous();
+                    break;
+                case "zdjęcia 3d": case "zdjęcia": case "przestrzenne": case "filmy 3d": case "spatial":
+                    OpenSpatialPicker();
                     break;
                 case "środowisko": case "środowiska": case "environment":
                     OpenEnvironmentPicker();
@@ -1151,6 +1178,12 @@ namespace CardboardXR.Demos.Workspace
             {
                 var pdf = m_ActiveScreen.GetComponent<PdfView>();
                 if (gesture == DynamicGesture.SwipeUp) pdf.NextPage(); else pdf.PreviousPage();
+            }
+            else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
+                     m_ActiveScreen != null && m_ActiveScreen.GetComponent<SpatialMediaView>() != null)
+            {
+                var media = m_ActiveScreen.GetComponent<SpatialMediaView>();
+                if (gesture == DynamicGesture.SwipeUp) media.Next(); else media.Previous();
             }
             else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
                      m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
