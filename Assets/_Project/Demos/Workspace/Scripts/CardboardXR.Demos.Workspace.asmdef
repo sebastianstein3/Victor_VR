@@ -13,7 +13,8 @@
         "Unity.XR.ARFoundation",
         "Unity.XR.ARSubsystems",
         "CardboardXR.Demos.Video",
-        "Unity.WebRTC"
+        "Unity.WebRTC",
+        "glTFast"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -27,6 +28,11 @@
             "name": "com.unity.webrtc",
             "expression": "[3.0.0-pre.1,)",
             "define": "CXR_WEBRTC"
+        },
+        {
+            "name": "com.unity.cloud.gltfast",
+            "expression": "[6.0.0,)",
+            "define": "CXR_GLTF"
         }
     ],
     "noEngineReferences": false

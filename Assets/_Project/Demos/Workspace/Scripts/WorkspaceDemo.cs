@@ -60,6 +60,48 @@ namespace CardboardXR.Demos.Workspace
         bool m_GroupDrag; // a held fist is carrying all the windows
         LiveCaptions m_Captions;
         EnvironmentSphere m_Environment;
+        readonly List<ModelViewer> m_Models = new();
+
+        // ---- 3D models (glTFast) on the surface looked at ----
+        public void OpenModelPicker()
+        {
+            var screen = CreateNewScreen("Modele 3D");
+            if (screen == null)
+                return;
+            var choices = new List<ChoiceList.Choice>();
+            if (ModelViewer.Available)
+            {
+                foreach (var file in ModelViewer.FindFiles())
+                {
+                    string path = file;
+                    choices.Add(new ChoiceList.Choice(System.IO.Path.GetFileNameWithoutExtension(file), () => PlaceModel(path)));
+                }
+            }
+            string empty = ModelViewer.Available
+                ? "Brak modeli. Wrzuć pliki .glb do folderu Modele aplikacji (Finder lub Pliki). Po wyborze spójrz na stół: model stanie tam, gdzie patrzysz."
+                : "Modele 3D wymagają pakietu glTFast: Unity > Package Manager > Add package by name > com.unity.cloud.gltfast.";
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Modele 3D", choices, empty);
+        }
+
+        void PlaceModel(string path)
+        {
+            var point = ModelViewer.PlacementPoint(m_Core.Head);
+            var model = new GameObject("Model " + System.IO.Path.GetFileNameWithoutExtension(path)).AddComponent<ModelViewer>();
+            model.transform.SetParent(transform, true);
+            model.Load(path, point, m_Core.Head);
+            m_Models.Add(model);
+            model.Closed += m => m_Models.Remove(m);
+
+            // Its controls, beside it at about eye level
+            var controls = WidgetPanel.Create<ModelControls>(transform, m_Core.Head, new Vector2(360f, 130f),
+                System.IO.Path.GetFileNameWithoutExtension(path), 0.9f);
+            controls.Model = model;
+            var right = Vector3.Cross(Vector3.up, Vector3.ProjectOnPlane(point - m_Core.Head.position, Vector3.up).normalized);
+            var position = point + right * 0.35f + Vector3.up * 0.25f;
+            controls.transform.SetPositionAndRotation(position, Quaternion.LookRotation(position - m_Core.Head.position, Vector3.up));
+            m_Widgets.Add(controls);
+            controls.Closed += w => m_Widgets.Remove(w);
+        }
 
         // ---- Environments: the room replaced by a place all around ----
         public void OpenEnvironmentPicker()
@@ -191,6 +233,12 @@ namespace CardboardXR.Demos.Workspace
                     Destroy(widget.gameObject);
             }
             m_Widgets.Clear();
+            foreach (var model in m_Models)
+            {
+                if (model != null)
+                    Destroy(model.gameObject);
+            }
+            m_Models.Clear();
 
             if (m_Keyboard != null)
                 Destroy(m_Keyboard.gameObject);
@@ -520,7 +568,7 @@ namespace CardboardXR.Demos.Workspace
             var saved = new SavedWorkspace { phone = m_PhoneScreen != null, locale = m_Voice != null ? m_Voice.Locale : null };
             foreach (var widget in m_Widgets)
             {
-                if (widget != null)
+                if (widget != null && widget.Kind != "model")
                     saved.widgets.Add(new SavedWidget { kind = widget.Kind, data = widget.SaveData });
             }
             foreach (var screen in m_Screens)
@@ -637,6 +685,7 @@ namespace CardboardXR.Demos.Workspace
                 new("Kalendarz", () => SpawnWidget("kalendarz")),
                 new("Czytnik PDF", OpenPdfPicker),
                 new("Środowisko", OpenEnvironmentPicker),
+                new("Modele 3D", OpenModelPicker),
             };
             choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
@@ -916,6 +965,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "środowisko": case "środowiska": case "environment":
                     OpenEnvironmentPicker();
+                    break;
+                case "modele": case "modele 3d": case "model": case "models":
+                    OpenModelPicker();
                     break;
                 case "wyłącz środowisko": case "pokój": case "room":
                     m_Environment?.Show(null);
@@ -1238,6 +1290,11 @@ namespace CardboardXR.Demos.Workspace
             {
                 if (widget != null)
                     m_RoomAnchors.Keep(widget.transform, widget.IsDragging);
+            }
+            foreach (var model in m_Models)
+            {
+                if (model != null)
+                    m_RoomAnchors.Keep(model.transform, false);
             }
             if (m_Keyboard != null && m_Keyboard.gameObject.activeSelf)
                 m_RoomAnchors.Keep(m_Keyboard.transform, false);
