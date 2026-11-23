@@ -107,6 +107,7 @@ namespace CardboardXR.Demos.Workspace
             if (m_ControlDock != null)
                 Destroy(m_ControlDock.gameObject);
 
+            WorkspaceSounds.Release();
             if (m_AddedListener != null)
                 Destroy(m_AddedListener);
 
@@ -158,6 +159,7 @@ namespace CardboardXR.Demos.Workspace
             m_CinemaBtn = Add(4, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
             Add(5, "ResetDeskBtn", M3Button.Variant.Tonal, ResetDeskPosition);
 
+            WorkspaceSounds.Attach(m_ControlDock);
             WorldUi.PlaceInFront(m_ControlDock, m_Core.Head, 1.2f, -22f, 0f);
         }
 

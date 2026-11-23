@@ -165,6 +165,7 @@ namespace CardboardXR.Demos.Workspace
 
             BuildPhoneFrame();
             ShowHomeScreen();
+            WorkspaceSounds.Attach(this);
         }
 
         void BuildPhoneFrame()
@@ -273,6 +274,9 @@ namespace CardboardXR.Demos.Workspace
                 M3.Text($"Label_{app.name}", m_HomeContainer, app.name, M3Theme.Type.LabelLarge,
                     new Vector2(colX, rowY - 40f), new Vector2(110f, 20f), M3Theme.OnSurface, TextAlignmentOptions.Center);
             }
+
+            // Home is rebuilt each time it is shown, so its buttons get the tap again
+            WorkspaceSounds.Attach(m_HomeContainer);
         }
 
         public void LaunchApp(SocialApp app)
@@ -336,6 +340,7 @@ namespace CardboardXR.Demos.Workspace
                 new Vector2(0f, -180f), ShowHomeScreen, "home", 170f);
 
             UpdateClipDisplay();
+            WorkspaceSounds.Attach(this);
         }
 
         public void NextClip()

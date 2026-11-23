@@ -63,6 +63,7 @@ namespace CardboardXR.Demos.Workspace
             m_SpatialAudio.maxDistance = 10f;
 
             BuildInterface(title);
+            WorkspaceSounds.Attach(this);
             BuildVirtualCursor();
             UpdateContentDisplay();
         }
@@ -166,7 +167,9 @@ namespace CardboardXR.Demos.Workspace
                     continue;
                 if (!CursorIsOver((RectTransform)button.transform))
                     continue;
-                button.Button.onClick.Invoke();
+                WorkspaceSounds.Muted = true;
+                try { button.Button.onClick.Invoke(); }
+                finally { WorkspaceSounds.Muted = false; }
                 return true;
             }
             return false;
