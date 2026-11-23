@@ -416,7 +416,7 @@ namespace CardboardXR.Demos.Workspace
             CreateNewScreen("Pulpit PC (Monitor 4K)");
             if (m_ActiveScreen != null)
             {
-                m_ActiveScreen.EnableRemoteDesktop("192.168.1.100");
+                m_ActiveScreen.EnableRemoteDesktop(); // address from Documents/pulpit.txt
             }
         }
 

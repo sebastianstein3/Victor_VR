@@ -31,6 +31,16 @@ namespace ProjectBootstrap
                 var plist = new PlistDocument();
                 plist.ReadFromFile(plistPath);
                 plist.root.SetString("NSSpeechRecognitionUsageDescription", SpeechUsage);
+
+                // The Workspace's PC screen reads frames over plain HTTP from a computer on the same
+                // Wi-Fi (RemoteDesktopReceiver). Player Settings allow HTTP, which makes Unity allow it
+                // everywhere (NSAllowsArbitraryLoads); narrow that to the local network only.
+                plist.root.SetString("NSLocalNetworkUsageDescription",
+                    "CardboardXR shows your computer's screen from the same Wi-Fi network in the Spatial Workspace.");
+                var ats = plist.root["NSAppTransportSecurity"] as PlistElementDict ?? plist.root.CreateDict("NSAppTransportSecurity");
+                ats.values.Remove("NSAllowsArbitraryLoads");
+                ats.values.Remove("NSAllowsArbitraryLoadsInWebContent");
+                ats.SetBoolean("NSAllowsLocalNetworking", true);
                 plist.WriteToFile(plistPath);
             }
             else

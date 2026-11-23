@@ -146,6 +146,18 @@ namespace CardboardXR.Demos.Workspace.Tests
         }
 
         [Test]
+        public void RemoteScreenIsLetterboxedInTheWindow()
+        {
+            var area = new Vector2(460f, 220f); // the window's text area
+            var wide = RemoteDesktopReceiver.FitInside(16f / 9f, area);   // a 16:9 PC screen: full height
+            Assert.AreEqual(220f, wide.y, 1e-3f);
+            Assert.AreEqual(220f * 16f / 9f, wide.x, 1e-3f);
+            var ultra = RemoteDesktopReceiver.FitInside(32f / 9f, area);  // wider than the area: full width
+            Assert.AreEqual(460f, ultra.x, 1e-3f);
+            Assert.AreEqual(460f * 9f / 32f, ultra.y, 1e-3f);
+        }
+
+        [Test]
         public void FeedClipsCycleForwardAndBackwardCorrectly()
         {
             int totalClips = 4;

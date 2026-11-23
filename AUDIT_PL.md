@@ -147,7 +147,10 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
    sąsiednie okno). ~~Wyśrodkowanie~~ **zrobione**: przycisk „Wyśrodkuj” w docku (i komenda głosowa
    „wyśrodkuj”) ustawia okna, telefon, dock i biurko przed użytkownikiem. Zostało: przełącznik układów
    (`M3.Segments`), dock jako `M3Toolbar`.
-7. Zdalny pulpit naprawdę: Moonlight/Sunshine (niskie opóźnienie) lub WebRTC (`com.unity.webrtc`);
+7. ~~Zdalny pulpit~~ **zrobione (podstawowo)**: `VisionPro/pc_stream/stream_server.py` na komputerze +
+   `RemoteDesktopReceiver` (klatki JPEG po HTTP w sieci lokalnej, 10–20 kl/s; klik, prawy klik, pisanie
+   i dyktowanie z `--allow-input`). Adres w `Documents/pulpit.txt`. HTTP w iOS ograniczony do sieci
+   lokalnej (ATS `NSAllowsLocalNetworking`). Zostało: Moonlight/WebRTC dla płynności. Pierwotnie: Moonlight/Sunshine (niskie opóźnienie) lub WebRTC (`com.unity.webrtc`);
    input z gładzika/klawiatury jest już kierowany do `RemoteDesktopReceiver`.
 8. WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
 9. Dźwięk przestrzenny okien: `AudioSource` są, ale nic nie gra – podpiąć wideo/pulpit.

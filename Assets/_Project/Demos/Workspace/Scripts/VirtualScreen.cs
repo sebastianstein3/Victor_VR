@@ -95,7 +95,7 @@ namespace CardboardXR.Demos.Workspace
             }
         }
 
-        public void EnableRemoteDesktop(string host = "192.168.1.100")
+        public void EnableRemoteDesktop(string host = null)
         {
             if (m_BodyText != null)
                 m_BodyText.gameObject.SetActive(false);
@@ -188,10 +188,7 @@ namespace CardboardXR.Demos.Workspace
         {
             Focused?.Invoke(this);
             if (m_Remote != null && CursorInsideBody())
-            {
-                m_Remote.SendInputEvent("click", m_CursorPos.x, m_CursorPos.y);
-                return true;
-            }
+                return m_Remote.Click(m_CursorPos);
             foreach (var button in GetComponentsInChildren<M3Button>(false))
             {
                 if (!button.isActiveAndEnabled || !button.Interactable)
@@ -211,6 +208,9 @@ namespace CardboardXR.Demos.Workspace
         public void ContextClickAtCursor()
         {
             Focused?.Invoke(this);
+            // On a PC window the secondary click is the PC's right click
+            if (m_Remote != null && CursorInsideBody() && m_Remote.Click(m_CursorPos, right: true))
+                return;
             TogglePin();
         }
 
