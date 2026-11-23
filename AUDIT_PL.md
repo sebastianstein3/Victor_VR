@@ -208,3 +208,23 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
 - **Prywatność dyktowania:** domyślnie Apple może przetwarzać mowę na serwerach (lepsza jakość);
   `VoiceDictation.OnDeviceOnly = true` wymusza rozpoznawanie na telefonie (wymaga pobranego języka).
 - Pobieranie z Google Drive po HTTPS, nazwy plików oczyszczane przez kod bazy (`DriveDownloader`).
+
+### Przeglądarka – druga wersja (wzorem obecnych przeglądarek)
+- Klatki zapisywane wprost do tekstury Metal (bez kopiowania przez C#), przechwytywanie synchroniczne
+  z zapasowym `takeSnapshot`; ~20 kl/s, gdy patrzysz na stronę, 2 kl/s, gdy nie (jak karty w tle).
+  Z `webviewtextureios` wzięta tylko technika; jego błędy (przejęcie i zwalnianie tekstury Unity,
+  wycieki kontekstu, zapis pikseli w adres zmiennej w OpenGL) – unikane.
+- Pasek postępu, prawdziwa domena + „Szyfrowane/NIESZYFROWANE” pod stroną (ochrona przed podróbkami),
+  blokowanie trackerów i reklam (reguły treści WebKit, lista ~24 domen), tryb ciemny stron,
+  powiększenie tekstu (- / + w oknie przeglądarki), okno prywatne (nic nie zostaje po zamknięciu,
+  nie trafia do `workspace.json`), odmowa dostępu stron do kamery/mikrofonu.
+- Pozostałe ograniczenie: pola wyboru pliku na stronach otwierają natywny wybór pliku, niewidoczny
+  w goglach (iOS nie daje tego zablokować w WKWebView); `drawViewHierarchy` dla widoku schowanego za
+  Unity trzeba sprawdzić na urządzeniu (jest zapas `takeSnapshot`).
+
+### Poprawki po drugim przeglądzie kodu
+- Obraz strony był odwrócony do góry nogami (kolejność wierszy) – naprawione.
+- Serwer: nieudane oferty WebRTC nie blokują już miejsc (test: 5 błędnych → 0 zajętych), `mss` tworzony
+  na każde przechwycenie / jeden wątek na ścieżkę WebRTC (bez wycieków, poprawne na Windows/X11),
+  odporność na NaN, ujemny `Content-Length`, nazwy aplikacji z polskimi znakami (czyste 404),
+  plik tokenu zawsze 0600. Samouczek w aplikacji opisuje token.

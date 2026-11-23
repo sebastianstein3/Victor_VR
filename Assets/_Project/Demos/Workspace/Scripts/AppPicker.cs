@@ -15,6 +15,7 @@ namespace CardboardXR.Demos.Workspace
     {
         // Always first in the list: a web browser running on the iPhone itself (BrowserView)
         public const string k_BrowserEntry = "Przeglądarka (iPhone)";
+        public const string k_PrivateBrowserEntry = "Prywatna przeglądarka";
         const int k_Columns = 2;
         const int k_Rows = 3;
         const float k_ButtonWidth = 222f;
@@ -30,8 +31,9 @@ namespace CardboardXR.Demos.Workspace
             m_Screen = screen;
             m_Screen.ShowBody(false);
             m_Group = M3.Group("AppList", canvas, VirtualScreen.BodyCenter, VirtualScreen.BodySize);
-            m_Status = M3.Text("AppListStatus", canvas, "Szukam aplikacji na komputerze...", M3Theme.Type.BodyLarge,
-                VirtualScreen.BodyCenter, new Vector2(VirtualScreen.BodySize.x, 60f), M3Theme.OnSurfaceVariant);
+            // Below the first row of buttons (which always has the browsers), above the footer
+            m_Status = M3.Text("AppListStatus", canvas, "Szukam aplikacji na komputerze...", M3Theme.Type.BodyMedium,
+                VirtualScreen.BodyCenter + new Vector2(0f, -40f), new Vector2(VirtualScreen.BodySize.x, 80f), M3Theme.OnSurfaceVariant);
             StartCoroutine(Load());
         }
 
@@ -43,9 +45,10 @@ namespace CardboardXR.Demos.Workspace
             {
                 m_Apps.Clear();
                 m_Apps.Add(k_BrowserEntry);
+                m_Apps.Add(k_PrivateBrowserEntry);
                 m_Apps.AddRange(apps);
                 m_Page = 0;
-                if (m_Apps.Count <= 1)
+                if (m_Apps.Count <= 2)
                     m_Status.text = "Brak widocznych okien. Otwórz aplikacje na komputerze (obok siebie, nie zminimalizowane) i odśwież.";
                 else
                     m_Status.gameObject.SetActive(false);
@@ -55,6 +58,7 @@ namespace CardboardXR.Demos.Workspace
                 // No computer: the iPhone's own browser is still offered
                 m_Apps.Clear();
                 m_Apps.Add(k_BrowserEntry);
+                m_Apps.Add(k_PrivateBrowserEntry);
                 m_Status.text = "<noparse>" + error + "</noparse>";
                 ShowPage();
             });
@@ -100,9 +104,9 @@ namespace CardboardXR.Demos.Workspace
         {
             Destroy(m_Group.gameObject);
             Destroy(m_Status.gameObject);
-            if (app == k_BrowserEntry)
+            if (app == k_BrowserEntry || app == k_PrivateBrowserEntry)
             {
-                m_Screen.EnableBrowser();
+                m_Screen.EnableBrowser(null, app == k_PrivateBrowserEntry);
                 Destroy(this);
                 return;
             }

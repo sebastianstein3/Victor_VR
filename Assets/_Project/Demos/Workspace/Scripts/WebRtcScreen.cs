@@ -59,8 +59,7 @@ namespace CardboardXR.Demos.Workspace
             var configuration = default(RTCConfiguration);
             configuration.iceServers = Array.Empty<RTCIceServer>();
             m_Peer = new RTCPeerConnection(ref configuration);
-            var transceiver = m_Peer.AddTransceiver(TrackKind.Video);
-            transceiver.Direction = RTCRtpTransceiverDirection.RecvOnly;
+            m_Peer.AddTransceiver(TrackKind.Video, new RTCRtpTransceiverInit { direction = RTCRtpTransceiverDirection.RecvOnly });
             m_Peer.OnTrack = trackEvent =>
             {
                 if (trackEvent.Track is VideoStreamTrack video)

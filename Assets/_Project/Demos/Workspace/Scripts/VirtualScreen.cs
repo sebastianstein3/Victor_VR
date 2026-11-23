@@ -204,6 +204,12 @@ namespace CardboardXR.Demos.Workspace
 
         void Resize(float factor)
         {
+            // In a browser, - / + zoom the page's text instead (more useful than a bigger window)
+            if (m_Browser != null)
+            {
+                m_Browser.ZoomBy(factor);
+                return;
+            }
             float size = Mathf.Clamp(m_Size * factor, k_MinSize, k_MaxSize);
             if (Mathf.Approximately(size, m_Size))
                 return;
@@ -221,13 +227,13 @@ namespace CardboardXR.Demos.Workspace
         public bool IsBrowser => m_Browser != null;
         public BrowserView Browser => m_Browser;
 
-        public void EnableBrowser(string url = null)
+        public void EnableBrowser(string url = null, bool privateMode = false)
         {
             if (m_Browser != null)
                 return;
-            SetTitle("Przeglądarka");
+            SetTitle(privateMode ? "Prywatna przeglądarka" : "Przeglądarka");
             m_Browser = gameObject.AddComponent<BrowserView>();
-            m_Browser.Initialize(this, m_CanvasRect, m_Head, url);
+            m_Browser.Initialize(this, m_CanvasRect, m_Head, url, privateMode);
         }
 
         // The character counter and Clear (a browser or PC window uses the footer for its own buttons)

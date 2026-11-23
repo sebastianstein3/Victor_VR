@@ -469,7 +469,8 @@ namespace CardboardXR.Demos.Workspace
             var saved = new SavedWorkspace { phone = m_PhoneScreen != null, locale = m_Voice != null ? m_Voice.Locale : null };
             foreach (var screen in m_Screens)
             {
-                if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null)
+                if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
+                    (screen.IsBrowser && screen.Browser.IsPrivate)) // a private window leaves no trace
                     continue;
                 saved.screens.Add(new SavedScreen
                 {
@@ -562,11 +563,11 @@ namespace CardboardXR.Demos.Workspace
         }
 
         // A web browser window running on the iPhone itself (BrowserView)
-        public void CreateBrowserScreen(string url = null)
+        public void CreateBrowserScreen(string url = null, bool privateMode = false)
         {
             var screen = CreateNewScreen("Przeglądarka");
             if (screen != null)
-                screen.EnableBrowser(url);
+                screen.EnableBrowser(url, privateMode);
         }
 
         // A screen that lists the computer's apps; the one picked becomes this screen (AppPicker)
@@ -723,6 +724,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "przeglądarka": case "internet": case "browser":
                     CreateBrowserScreen();
+                    break;
+                case "prywatna przeglądarka": case "tryb prywatny": case "private browser":
+                    CreateBrowserScreen(null, true);
                     break;
                 case "wstecz": case "back":
                     if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)

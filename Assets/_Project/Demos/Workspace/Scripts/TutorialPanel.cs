@@ -19,20 +19,21 @@ namespace CardboardXR.Demos.Workspace
 
             "<b>1. Mac (raz)</b>\n\n" +
             "Terminal, wklej:\n" +
-            "<noparse>pip3 install mss pillow pyobjc-framework-Quartz pyautogui pyperclip</noparse>\n\n" +
+            "<noparse>pip3 install mss pillow pyobjc-framework-Quartz pyautogui pyperclip</noparse>\n" +
+            "(płynny obraz: także <noparse>aiortc numpy</noparse>)\n" +
             "Ustawienia systemowe > Prywatność i ochrona: włącz Terminal w <b>Nagrywanie ekranu</b> " +
             "(i w <b>Dostępność</b>, aby klikać z gogli). Potem otwórz Terminal ponownie.",
 
             "<b>2. Serwer na Macu</b>\n\n" +
             "W folderze VisionPro/pc_stream uruchom:\n" +
             "<noparse>python3 stream_server.py --allow-input</noparse>\n\n" +
-            "Zapisz adres, który wypisze (np. 192.168.1.20:8765). Nie zamykaj Terminala. " +
-            "Bez --allow-input gogle tylko oglądają.",
+            "Zapisz całą linię, którą wypisze: adres i token, np.\n<noparse>192.168.1.20:8765 AbCdEf123456</noparse>\n" +
+            "Token chroni dostęp. Nie zamykaj Terminala. Bez --allow-input gogle tylko oglądają.",
 
             "<b>3. Adres w iPhonie (raz)</b>\n\n" +
             "Stuknij w docku <b>PC</b>: powstanie plik pulpit.txt.\n" +
             "Na iPhonie: Pliki > Na moim iPhonie > CardboardXR > <b>pulpit.txt</b>.\n" +
-            "Wpisz adres Maca w pierwszej linii i zapisz.\n" +
+            "Wklej w pierwszej linii całą linię z serwera (adres, spacja, token) i zapisz.\n" +
             "(Albo na Macu: Finder > iPhone > Pliki > CardboardXR.)",
 
             "<b>4. Mac w goglach</b>\n\n" +

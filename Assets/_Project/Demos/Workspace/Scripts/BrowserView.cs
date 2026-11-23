@@ -16,13 +16,18 @@ namespace CardboardXR.Demos.Workspace
     // Click: look at the page and pinch, or the desk trackpad / a mouse on the window's cursor.
     // Typing (desk keyboard, Bluetooth keyboard, dictation) goes into the page's focused field, or into
     // the address while "Adres" is on (Enter opens it; words without a dot search DuckDuckGo).
-    // Scrolling: swipe up/down with an open hand, or the mouse wheel.
+    // Scrolling: swipe up/down with an open hand, or the mouse wheel. The window's - / + zoom the page's
+    // text (like Safari's "Aa"). Under the page: the real host, and whether the page is fully encrypted.
+    // A private window keeps no cookies, cache or history after it closes. A page the user isn't
+    // looking at refreshes less often (like background tabs), to save battery and heat.
     public class BrowserView : MonoBehaviour
     {
         public const string k_HomePage = "https://duckduckgo.com/";
         const int k_TextureWidth = 920;   // 2 px per dp of the window's text area (460 x 220 dp)
         const int k_TextureHeight = 440;
-        const float k_FrameInterval = 0.1f; // ~10 snapshots a second
+        const float k_FrameInterval = 0.05f;     // ~20 fps while looked at
+        const float k_IdleFrameInterval = 0.5f;  // 2 fps when not
+        const float k_LookedAtDegrees = 35f;
 
         VirtualScreen m_Screen;
         Transform m_Head;
@@ -39,13 +44,20 @@ namespace CardboardXR.Demos.Workspace
         string m_Address = "";
         string m_Url = "";
         string m_Title = "";
+        bool m_Secure;
+        bool m_Private;
+        bool m_DirectTexture; // frames written straight into the Metal texture (no copy through C#)
+        float m_Zoom = 1f;
+        RectTransform m_Progress;
 
         public string Url => m_Url;
+        public bool IsPrivate => m_Private;
 
         static readonly Dictionary<int, BrowserView> s_Views = new();
 
-        public void Initialize(VirtualScreen screen, RectTransform canvas, Transform head, string url)
+        public void Initialize(VirtualScreen screen, RectTransform canvas, Transform head, string url, bool privateMode = false)
         {
+            m_Private = privateMode;
             m_Screen = screen;
             m_Head = head;
             m_Screen.ShowBody(false);
@@ -62,6 +74,12 @@ namespace CardboardXR.Demos.Workspace
             pageObject.transform.SetAsFirstSibling();
             pageObject.AddComponent<PageSurface>().Owner = this;
 
+            // Loading progress: a thin bar along the top of the page
+            m_Progress = M3.Surface("BrowserProgress", canvas,
+                VirtualScreen.BodyCenter + new Vector2(0f, VirtualScreen.BodySize.y / 2f - 2f), new Vector2(0f, 4f),
+                M3Theme.Primary, 0f).rectTransform;
+            m_Progress.gameObject.SetActive(false);
+
             m_Status = M3.Text("BrowserStatus", canvas, "", M3Theme.Type.BodyMedium,
                 VirtualScreen.BodyCenter + new Vector2(0f, -VirtualScreen.BodySize.y / 2f + 14f),
                 new Vector2(VirtualScreen.BodySize.x, 20f), new Color(0.15f, 0.15f, 0.2f), TextAlignmentOptions.Center);
@@ -77,7 +95,7 @@ namespace CardboardXR.Demos.Workspace
 
 #if UNITY_IOS && !UNITY_EDITOR
             EnsureReceiver();
-            m_Id = CardboardXR_BrowserCreate(k_TextureWidth, k_TextureHeight);
+            m_Id = CardboardXR_BrowserCreate(k_TextureWidth, k_TextureHeight, m_Private ? 1 : 0);
             if (m_Id == 0)
             {
                 SetStatus("Nie udało się uruchomić przeglądarki");
@@ -85,9 +103,21 @@ namespace CardboardXR.Demos.Workspace
             }
             s_Views[m_Id] = this;
             m_Texture = new Texture2D(k_TextureWidth, k_TextureHeight, TextureFormat.RGBA32, false);
-            m_Buffer = new byte[k_TextureWidth * k_TextureHeight * 4];
-            m_BufferHandle = GCHandle.Alloc(m_Buffer, GCHandleType.Pinned);
+            m_Texture.Apply(false); // makes the GPU texture
             m_Page.texture = m_Texture;
+            // Metal: the native side writes frames into the texture itself. Otherwise through a buffer.
+            m_DirectTexture = SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Metal;
+            if (m_DirectTexture)
+            {
+                CardboardXR_BrowserSetTexture(m_Id, m_Texture.GetNativeTexturePtr());
+            }
+            else
+            {
+                m_Buffer = new byte[k_TextureWidth * k_TextureHeight * 4];
+                m_BufferHandle = GCHandle.Alloc(m_Buffer, GCHandleType.Pinned);
+            }
+            if (m_Private)
+                m_Screen.SetTitle("Prywatna przeglądarka");
             Navigate(string.IsNullOrEmpty(url) ? k_HomePage : url);
 #else
             m_Page.color = new Color(0.9f, 0.9f, 0.92f);
@@ -233,15 +263,55 @@ namespace CardboardXR.Demos.Workspace
         void Update()
         {
 #if UNITY_IOS && !UNITY_EDITOR
-            if (m_Id == 0 || Time.unscaledTime < m_NextFrame)
+            if (m_Id == 0)
                 return;
-            m_NextFrame = Time.unscaledTime + k_FrameInterval;
-            if (CardboardXR_BrowserCopyFrame(m_Id, m_BufferHandle.AddrOfPinnedObject(), m_Buffer.Length) == 1)
+            UpdateProgress(CardboardXR_BrowserProgress(m_Id));
+            if (Time.unscaledTime < m_NextFrame)
+                return;
+            m_NextFrame = Time.unscaledTime + (IsLookedAt() ? k_FrameInterval : k_IdleFrameInterval);
+            if (m_DirectTexture)
+            {
+                CardboardXR_BrowserUpdateTexture(m_Id);
+            }
+            else if (CardboardXR_BrowserCopyFrame(m_Id, m_BufferHandle.AddrOfPinnedObject(), m_Buffer.Length) == 1)
             {
                 m_Texture.LoadRawTextureData(m_Buffer);
                 m_Texture.Apply(false);
             }
 #endif
+        }
+
+        bool IsLookedAt()
+        {
+            if (m_Head == null)
+                return true;
+            var toPage = m_PageRect.position - m_Head.position;
+            return Vector3.Angle(m_Head.forward, toPage) < k_LookedAtDegrees;
+        }
+
+        void UpdateProgress(float progress)
+        {
+            bool show = progress >= 0f && progress < 1f;
+            if (m_Progress.gameObject.activeSelf != show)
+                m_Progress.gameObject.SetActive(show);
+            if (show)
+            {
+                float width = VirtualScreen.BodySize.x * Mathf.Clamp01(progress);
+                m_Progress.sizeDelta = new Vector2(width, 4f);
+                m_Progress.anchoredPosition = VirtualScreen.BodyCenter +
+                    new Vector2(-VirtualScreen.BodySize.x / 2f + width / 2f, VirtualScreen.BodySize.y / 2f - 2f);
+            }
+        }
+
+        // Text zoom (the window's - / +), like Safari's "Aa"
+        public void ZoomBy(float factor)
+        {
+            m_Zoom = Mathf.Clamp(m_Zoom * factor, 0.5f, 3f);
+#if UNITY_IOS && !UNITY_EDITOR
+            if (m_Id != 0)
+                CardboardXR_BrowserSetZoom(m_Id, m_Zoom);
+#endif
+            SetStatus($"Tekst {m_Zoom * 100f:F0}%");
         }
 
         [Serializable]
@@ -253,20 +323,41 @@ namespace CardboardXR.Demos.Workspace
             public bool loading;
             public bool canGoBack;
             public bool canGoForward;
+            public bool secure;
         }
 
         void ApplyState(BrowserState state)
         {
             m_Url = state.url ?? "";
             m_Title = state.title ?? "";
-            m_Screen.SetTitle(string.IsNullOrEmpty(m_Title) ? "Przeglądarka" : m_Title);
+            m_Secure = state.secure;
+            string name = string.IsNullOrEmpty(m_Title) ? "Przeglądarka" : m_Title;
+            m_Screen.SetTitle(m_Private ? "[Prywatna] " + name : name);
             if (!m_AddressMode)
-                SetStatus(state.loading ? "Wczytywanie..." : "");
+                ShowHost();
         }
 
         void ShowAddressOrState()
         {
-            SetStatus(m_AddressMode ? "Adres: " + m_Address + "|" : "");
+            if (m_AddressMode)
+                SetStatus("Adres: " + m_Address + "|");
+            else
+                ShowHost();
+        }
+
+        // The real host, as current browsers show it (a title can say anything): against lookalike
+        // pages. Green when the page and everything on it came over https.
+        void ShowHost()
+        {
+            string host = Uri.TryCreate(m_Url, UriKind.Absolute, out var uri) ? uri.Host : "";
+            if (string.IsNullOrEmpty(host))
+            {
+                SetStatus("");
+                return;
+            }
+            if (m_Status != null)
+                m_Status.color = m_Secure ? new Color(0.1f, 0.5f, 0.2f) : new Color(0.75f, 0.2f, 0.1f);
+            SetStatus((m_Secure ? "Szyfrowane · " : "NIESZYFROWANE · ") + host);
         }
 
         void SetStatus(string text)
@@ -281,6 +372,8 @@ namespace CardboardXR.Demos.Workspace
             if (m_Id != 0)
             {
                 s_Views.Remove(m_Id);
+                // Stop writing into the texture before it is freed
+                CardboardXR_BrowserSetTexture(m_Id, IntPtr.Zero);
                 CardboardXR_BrowserDestroy(m_Id);
             }
 #endif
@@ -307,7 +400,11 @@ namespace CardboardXR.Demos.Workspace
         }
 
 #if UNITY_IOS && !UNITY_EDITOR
-        [DllImport("__Internal")] static extern int CardboardXR_BrowserCreate(int width, int height);
+        [DllImport("__Internal")] static extern int CardboardXR_BrowserCreate(int width, int height, int privateMode);
+        [DllImport("__Internal")] static extern void CardboardXR_BrowserSetTexture(int id, IntPtr texture);
+        [DllImport("__Internal")] static extern int CardboardXR_BrowserUpdateTexture(int id);
+        [DllImport("__Internal")] static extern float CardboardXR_BrowserProgress(int id);
+        [DllImport("__Internal")] static extern void CardboardXR_BrowserSetZoom(int id, float zoom);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserDestroy(int id);
         [DllImport("__Internal")] static extern int CardboardXR_BrowserLoad(int id, string url);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserGoBack(int id);

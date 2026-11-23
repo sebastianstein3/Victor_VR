@@ -37,6 +37,7 @@ System Settings > Privacy & Security.
 """
 import argparse
 import hmac
+import math
 import io
 import os
 import secrets
@@ -63,6 +64,7 @@ def load_token(renew):
         with open(TOKEN_FILE, encoding="utf-8") as f:
             token = f.read().strip()
         if len(token) >= 12:
+            os.chmod(TOKEN_FILE, 0o600)
             return token
     token = secrets.token_urlsafe(12)  # ~96 bits
     descriptor = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -70,7 +72,6 @@ def load_token(renew):
         f.write(token)
     return token
 _capture_lock = threading.Lock()
-_local = threading.local()
 
 
 def list_windows():
@@ -126,10 +127,8 @@ def find_region(app):
 def grab_jpeg(app=None):
     """The main screen, or one app's window, as JPEG bytes at most ARGS.width pixels wide."""
     region = find_region(app)
-    with _capture_lock:
-        if not hasattr(_local, "sct"):
-            _local.sct = getattr(mss, "MSS", None)() if hasattr(mss, "MSS") else mss.mss()
-        shot = _local.sct.grab(region)
+    with _capture_lock, new_mss() as sct:  # one per grab: mss handles belong to one thread on Windows/X11
+        shot = sct.grab(region)
     image = Image.frombytes("RGB", shot.size, shot.rgb)
     if image.width > ARGS.width:
         image = image.resize((ARGS.width, round(image.height * ARGS.width / image.width)), Image.BILINEAR)
@@ -138,8 +137,12 @@ def grab_jpeg(app=None):
     return buffer.getvalue()
 
 
+def new_mss():
+    return mss.MSS() if hasattr(mss, "MSS") else mss.mss()
+
+
 def monitor_size():
-    with (mss.MSS() if hasattr(mss, "MSS") else mss.mss()) as sct:
+    with new_mss() as sct:
         monitor = sct.monitors[1]
         return monitor["left"], monitor["top"], monitor["width"], monitor["height"]
 
@@ -172,8 +175,11 @@ def handle_input(event):
         activate(app)  # clicks and typing go to that app
     if kind in ("click", "rightclick"):
         region = find_region(app)
-        u = min(max(float(event["x"]), 0.0), 1.0)  # never outside the shared window/screen
-        v = min(max(float(event["y"]), 0.0), 1.0)
+        u, v = float(event["x"]), float(event["y"])
+        if not (math.isfinite(u) and math.isfinite(v)):
+            return
+        u = min(max(u, 0.0), 1.0)  # never outside the shared window/screen
+        v = min(max(v, 0.0), 1.0)
         x = region["left"] + u * region["width"]
         y = region["top"] + v * region["height"]
         pyautogui.click(x, y, button="right" if kind == "rightclick" else "left")
@@ -216,10 +222,17 @@ if HAVE_RTC:
             super().__init__()
             self.app = app
             self.sct = None
+            # Always the same thread for this track's mss handle (required on Windows/X11)
+            from concurrent.futures import ThreadPoolExecutor
+            self.executor = ThreadPoolExecutor(max_workers=1)
+
+        def stop(self):
+            super().stop()
+            self.executor.shutdown(wait=False)
 
         def grab(self):
             if self.sct is None:
-                self.sct = mss.MSS() if hasattr(mss, "MSS") else mss.mss()
+                self.sct = new_mss()
             shot = self.sct.grab(find_region(self.app))
             image = numpy.frombuffer(shot.rgb, dtype=numpy.uint8).reshape(shot.height, shot.width, 3)
             frame = VideoFrame.from_ndarray(image, format="rgb24")
@@ -232,7 +245,7 @@ if HAVE_RTC:
             pts, time_base = await self.next_timestamp()
             loop = asyncio.get_running_loop()
             try:
-                frame = await loop.run_in_executor(None, self.grab)
+                frame = await loop.run_in_executor(self.executor, self.grab)
             except Exception as error:  # window closed meanwhile: a black frame, not a dead stream
                 print(f"capture error: {error}", file=sys.stderr)
                 frame = VideoFrame.from_ndarray(numpy.zeros((360, 640, 3), dtype=numpy.uint8), format="rgb24")
@@ -251,16 +264,21 @@ if HAVE_RTC:
                 _rtc["peers"].discard(peer)
                 await peer.close()
 
-        await peer.setRemoteDescription(RTCSessionDescription(sdp=sdp, type=kind))
-        for transceiver in peer.getTransceivers():
-            if transceiver.kind == "video":
-                transceiver.direction = "sendonly"
+        try:
+            await peer.setRemoteDescription(RTCSessionDescription(sdp=sdp, type=kind))
+            for transceiver in peer.getTransceivers():
+                if transceiver.kind == "video":
+                    transceiver.direction = "sendonly"
+                    peer.addTrack(ScreenTrack(app))
+                    break
+            else:
                 peer.addTrack(ScreenTrack(app))
-                break
-        else:
-            peer.addTrack(ScreenTrack(app))
-        await peer.setLocalDescription(await peer.createAnswer())  # waits for ICE gathering
-        return {"sdp": peer.localDescription.sdp, "type": peer.localDescription.type}
+            await peer.setLocalDescription(await peer.createAnswer())  # waits for ICE gathering
+            return {"sdp": peer.localDescription.sdp, "type": peer.localDescription.type}
+        except Exception:
+            _rtc["peers"].discard(peer)  # a bad offer must not use up a viewer slot
+            await peer.close()
+            raise
 
     def start_rtc_loop():
         loop = asyncio.new_event_loop()
@@ -295,8 +313,8 @@ class Handler(BaseHTTPRequestHandler):
         app = (parse_qs(url.query).get("app") or [None])[0]
         try:
             data = grab_jpeg(app)
-        except LookupError as error:  # the app's window is closed, minimised or on another Space
-            self.send_error(404, str(error))
+        except LookupError:  # the app's window is closed, minimised or on another Space
+            self.send_error(404, "no visible window of that app")
             return
         except Exception as error:  # e.g. no screen-recording permission on macOS
             print(f"capture error: {error}", file=sys.stderr)
@@ -315,7 +333,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path not in ("/input", "/offer"):
             self.send_error(404)
             return
-        length = min(int(self.headers.get("Content-Length", 0)), 64 * 1024)
+        try:
+            length = max(0, min(int(self.headers.get("Content-Length", 0)), 64 * 1024))
+        except ValueError:
+            length = 0
         body = self.rfile.read(length)
         if self.path == "/offer":
             self.handle_offer(body)

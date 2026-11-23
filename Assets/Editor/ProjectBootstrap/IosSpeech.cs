@@ -60,6 +60,9 @@ namespace ProjectBootstrap
             var framework = project.GetUnityFrameworkTargetGuid();
             project.AddFrameworkToProject(framework, "Speech.framework", false);
             project.AddFrameworkToProject(framework, "AVFoundation.framework", false);
+            // The Workspace's browser (Plugins/iOS/CardboardXRBrowser.mm)
+            project.AddFrameworkToProject(framework, "WebKit.framework", false);
+            project.AddFrameworkToProject(framework, "Metal.framework", false);
             project.WriteToFile(projectPath);
             Debug.Log("[ProjectSetup] Voice dictation: speech usage text added, Speech.framework linked.");
         }
