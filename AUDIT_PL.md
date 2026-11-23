@@ -128,7 +128,9 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
    klawiatury płasko na wykrytym blacie dałoby prawdziwy „opór” stołu i lepsze wykrywanie stuknięć.
 2. ~~**Okna przypięte do pokoju**~~ **zrobione (w trakcie działania)**: `WorkspaceAnchors` – każde
    nieruchome okno, telefon, klawiatura i gładzik ma kotwicę ARKit; przenoszone puszczają ją i dostają
-   nową po odłożeniu. Zostało: zapis układu między uruchomieniami (ARWorldMap). Pierwotny opis: (kotwice ARKit przez `AnchorPlacer`) zamiast względem głowy przy starcie;
+   nową po odłożeniu. **Zapis między uruchomieniami: zrobione częściowo** – `Documents/workspace.json` pamięta okna
+   (tytuł, notatki, PC, slot, rozmiar, przypięcie), telefon i język dyktowania; po ponownym wejściu
+   wracają wokół użytkownika (sloty, nie dokładne miejsca w pokoju – to wymaga ARWorldMap). Pierwotny opis: (kotwice ARKit przez `AnchorPlacer`) zamiast względem głowy przy starcie;
    później zapis układu między uruchomieniami (dziś baza nie ma trwałości kotwic: PlayerPrefs + ARWorldMap).
 3. ~~**Prawdziwe wideo w telefonie**~~ **zrobione (telefon)**: filmy z folderu `Documents/Klipy` na iPhonie
    (kopiuj przez Finder lub aplikację Pliki; .mp4/.mov/.m4v, najlepiej pionowe) grają w TikTok/Shorts/

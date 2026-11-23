@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using CardboardXR.Demos;
 using CardboardXR.Hands;
 using CardboardXR.UI;
@@ -88,7 +90,7 @@ namespace CardboardXR.Demos.Workspace
             // plays nothing: the key and trackpad clicks and the windows' spatial audio would be silent.
             // The listener goes on the head, so 3D sounds follow where the user looks (and AirPods
             // head tracking can do the rest).
-            if (Object.FindFirstObjectByType<AudioListener>() == null)
+            if (FindFirstObjectByType<AudioListener>() == null)
                 m_AddedListener = m_Core.Head.gameObject.AddComponent<AudioListener>();
 
             // Cinema Dimmer
@@ -105,8 +107,12 @@ namespace CardboardXR.Demos.Workspace
 
             BuildControlDock();
             SpawnKeyboardAndTrackpad();
-            CreateNewScreen("Główny Notatnik");
-            SpawnPhoneScreen(); // Spawn TikTok/Messenger phone
+            // The windows of the last session, or a first notepad and the phone
+            if (!RestoreWorkspace())
+            {
+                CreateNewScreen("Główny Notatnik");
+                SpawnPhoneScreen();
+            }
 
             // Attach spatial gesture detector
             m_Gestures = gameObject.AddComponent<SpatialGestureDetector>();
@@ -121,6 +127,8 @@ namespace CardboardXR.Demos.Workspace
         {
             if (PinchRouter.Handler == (IPinchHandler)this)
                 PinchRouter.Handler = null;
+
+            SaveWorkspace();
 
             // Anchored panels are children of anchors in the Core scene: bring them home first, or they
             // would outlive the demo
@@ -388,15 +396,21 @@ namespace CardboardXR.Demos.Workspace
             m_PhoneScreen.Closed += _ => m_PhoneScreen = null;
         }
 
-        public void CreateNewScreen(string title)
+        public VirtualScreen CreateNewScreen(string title) => CreateNewScreen(title, -1);
+
+        // slot: where to put it (from a saved workspace), or -1 for the first free one
+        VirtualScreen CreateNewScreen(string title, int slot)
         {
             if (m_Core == null)
-                return;
+                return null;
 
             // The first free slot: left and right of the first screen, then a row above.
-            int slot = 0;
-            while (m_ScreenSlots.ContainsValue(slot))
-                slot++;
+            if (slot < 0 || m_ScreenSlots.ContainsValue(slot))
+            {
+                slot = 0;
+                while (m_ScreenSlots.ContainsValue(slot))
+                    slot++;
+            }
             float yaw = k_ScreenSlotYaws[slot % k_ScreenSlotYaws.Length];
             float pitch = k_ScreenPitch + (slot / k_ScreenSlotYaws.Length) * k_ScreenRowPitch;
 
@@ -409,6 +423,112 @@ namespace CardboardXR.Demos.Workspace
             m_Screens.Add(screen);
             m_ScreenSlots[screen] = slot;
             SetActiveScreen(screen);
+            return screen;
+        }
+
+        // ---- Saved workspace: Documents/workspace.json ----
+        // The windows (title, notes, PC or not, slot, size, pin), whether the phone was open and the
+        // dictation language, written when the demo closes or the app goes to the background, and
+        // restored around the user the next time. Slots, not room positions: those would need ARKit's
+        // ARWorldMap.
+
+        [Serializable]
+        class SavedScreen
+        {
+            public string title;
+            public string text;
+            public bool pc;
+            public int slot;
+            public float size = 1f;
+            public bool pinned;
+        }
+
+        [Serializable]
+        class SavedWorkspace
+        {
+            public List<SavedScreen> screens = new();
+            public bool phone;
+            public string locale;
+        }
+
+        static string SaveFile => Path.Combine(Application.persistentDataPath, "workspace.json");
+
+        void SaveWorkspace()
+        {
+            if (m_Core == null)
+                return;
+            var saved = new SavedWorkspace { phone = m_PhoneScreen != null, locale = m_Voice != null ? m_Voice.Locale : null };
+            foreach (var screen in m_Screens)
+            {
+                if (screen == null)
+                    continue;
+                saved.screens.Add(new SavedScreen
+                {
+                    title = screen.Title,
+                    text = screen.IsRemoteDesktop ? "" : screen.Text,
+                    pc = screen.IsRemoteDesktop,
+                    slot = m_ScreenSlots.TryGetValue(screen, out var slot) ? slot : -1,
+                    size = screen.Size,
+                    pinned = screen.Pinned,
+                });
+            }
+            try
+            {
+                File.WriteAllText(SaveFile, JsonUtility.ToJson(saved, true));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Workspace] Nie zapisano układu: {e.Message}");
+            }
+        }
+
+        bool RestoreWorkspace()
+        {
+            SavedWorkspace saved;
+            try
+            {
+                if (!File.Exists(SaveFile))
+                    return false;
+                saved = JsonUtility.FromJson<SavedWorkspace>(File.ReadAllText(SaveFile));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Workspace] Nie wczytano układu: {e.Message}");
+                return false;
+            }
+            if (saved == null || saved.screens == null || saved.screens.Count == 0)
+                return false;
+
+            foreach (var item in saved.screens)
+            {
+                var screen = CreateNewScreen(string.IsNullOrEmpty(item.title) ? "Ekran" : item.title, item.slot);
+                if (screen == null)
+                    continue;
+                if (item.pc)
+                    screen.EnableRemoteDesktop();
+                else
+                    screen.SetText(item.text);
+                if (item.size > 0f && !Mathf.Approximately(item.size, 1f))
+                    screen.SetSize(item.size);
+                screen.SetPinned(item.pinned);
+            }
+            if (saved.phone)
+                SpawnPhoneScreen();
+            if (m_Voice != null && !string.IsNullOrEmpty(saved.locale))
+            {
+                m_Voice.Locale = saved.locale;
+                if (m_LanguageBtn != null)
+                    m_LanguageBtn.Text = saved.locale == "en-US" ? "EN" : "PL";
+            }
+            Debug.Log($"[Workspace] Przywrócono układ: {saved.screens.Count} okien");
+            return true;
+        }
+
+        // iOS may end a backgrounded app without OnDemoExit: save when going to the background
+        void OnApplicationPause(bool paused)
+        {
+            if (paused)
+                SaveWorkspace();
         }
 
         public void CreatePcDesktopScreen()

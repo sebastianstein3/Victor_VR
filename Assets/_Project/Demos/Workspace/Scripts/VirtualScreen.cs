@@ -37,6 +37,23 @@ namespace CardboardXR.Demos.Workspace
         public bool IsDragging => m_IsDragging;
         public bool Pinned => m_Pinned;
         public string Text => m_Content;
+        public string Title { get; private set; }
+        public float Size => m_Size;
+
+        // For restoring a saved workspace
+        public void SetText(string text)
+        {
+            m_Content = text ?? "";
+            UpdateContentDisplay();
+        }
+
+        public void SetSize(float size) => Resize(size / m_Size);
+
+        public void SetPinned(bool pinned)
+        {
+            if (pinned != m_Pinned)
+                TogglePin();
+        }
         public RectTransform Rect => m_CanvasRect;
 
         public static VirtualScreen Create(Transform parent, Transform head, string title, Vector3 startPos, Quaternion startRot, float distance = 1.35f)
@@ -55,6 +72,7 @@ namespace CardboardXR.Demos.Workspace
             m_CanvasRect = canvasRect;
             m_Head = head;
             m_DragDistance = distance;
+            Title = title;
 
             // Configure 3D Spatial Audio for AirPods Pro 2 directly on the moving panel
             m_SpatialAudio = gameObject.AddComponent<AudioSource>();
