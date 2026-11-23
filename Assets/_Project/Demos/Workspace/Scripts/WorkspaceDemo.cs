@@ -13,7 +13,7 @@ namespace CardboardXR.Demos.Workspace
     // Includes floating monitors, remote PC desktop streaming, TikTok/Messenger smartphone,
     // invisible desk keyboard and trackpad with physical haptics, AirPods Pro 2 3D spatial audio,
     // voice dictation, cinema dimming mode, and Bluetooth physical keyboard/mouse input.
-    public class WorkspaceDemo : Demo, IPinchHandler
+    public partial class WorkspaceDemo : Demo, IPinchHandler
     {
         const float k_ScreenDistance = 1.4f;
         const float k_KeyboardDistance = 0.6f;
@@ -158,6 +158,13 @@ namespace CardboardXR.Demos.Workspace
             if (m_PhoneScreen != null)
                 Destroy(m_PhoneScreen.gameObject);
 
+            foreach (var widget in m_Widgets)
+            {
+                if (widget != null)
+                    Destroy(widget.gameObject);
+            }
+            m_Widgets.Clear();
+
             if (m_Keyboard != null)
                 Destroy(m_Keyboard.gameObject);
 
@@ -195,7 +202,7 @@ namespace CardboardXR.Demos.Workspace
             // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
             const float gap = M3Theme.k_TargetGap;
             const float margin = 16f;
-            string[] labels = { "Ekran", "PC", "Aplikacje", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj", "?" };
+            string[] labels = { "Ekran", "PC", "Aplikacje", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj", "Więcej" };
             var widths = new float[labels.Length];
             float total = gap * (labels.Length - 1);
             for (int i = 0; i < labels.Length; i++)
@@ -224,7 +231,7 @@ namespace CardboardXR.Demos.Workspace
             m_CinemaBtn = Add(6, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
             m_DeskBtn = Add(7, "DeskBtn", M3Button.Variant.Tonal, BeginDeskPlacement);
             Add(8, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
-            Add(9, "HelpBtn", M3Button.Variant.Text, OpenTutorial);
+            Add(9, "MoreBtn", M3Button.Variant.Text, OpenMore);
 
             WorkspaceSounds.Attach(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
@@ -455,9 +462,17 @@ namespace CardboardXR.Demos.Workspace
         }
 
         [Serializable]
+        class SavedWidget
+        {
+            public string kind;
+            public string data;
+        }
+
+        [Serializable]
         class SavedWorkspace
         {
             public List<SavedScreen> screens = new();
+            public List<SavedWidget> widgets = new();
             public bool phone;
             public string locale;
         }
@@ -469,9 +484,15 @@ namespace CardboardXR.Demos.Workspace
             if (m_Core == null)
                 return;
             var saved = new SavedWorkspace { phone = m_PhoneScreen != null, locale = m_Voice != null ? m_Voice.Locale : null };
+            foreach (var widget in m_Widgets)
+            {
+                if (widget != null)
+                    saved.widgets.Add(new SavedWidget { kind = widget.Kind, data = widget.SaveData });
+            }
             foreach (var screen in m_Screens)
             {
                 if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
+                    screen.GetComponent<ChoiceList>() != null ||
                     (screen.IsBrowser && screen.Browser.IsPrivate)) // a private window leaves no trace
                     continue;
                 saved.screens.Add(new SavedScreen
@@ -513,8 +534,9 @@ namespace CardboardXR.Demos.Workspace
                 Debug.LogWarning($"[Workspace] Nie wczytano układu: {e.Message}");
                 return false;
             }
-            if (saved == null || saved.screens == null || saved.screens.Count == 0)
+            if (saved == null || ((saved.screens == null || saved.screens.Count == 0) && (saved.widgets == null || saved.widgets.Count == 0)))
                 return false;
+            saved.screens ??= new List<SavedScreen>();
 
             foreach (var item in saved.screens)
             {
@@ -535,6 +557,15 @@ namespace CardboardXR.Demos.Workspace
             }
             if (saved.phone)
                 SpawnPhoneScreen();
+            if (saved.widgets != null)
+            {
+                foreach (var item in saved.widgets)
+                {
+                    var widget = SpawnWidget(item.kind);
+                    if (widget != null)
+                        widget.LoadData(item.data);
+                }
+            }
             if (m_Voice != null && !string.IsNullOrEmpty(saved.locale))
             {
                 m_Voice.Locale = saved.locale;
@@ -550,6 +581,70 @@ namespace CardboardXR.Demos.Workspace
         {
             if (paused)
                 SaveWorkspace();
+        }
+
+        // ---- "Więcej": the tools that don't fit in the dock ----
+        public void OpenMore()
+        {
+            var screen = CreateNewScreen("Więcej");
+            if (screen == null)
+                return;
+            var choices = new List<ChoiceList.Choice>
+            {
+                new("Zegar", () => SpawnWidget("zegar")),
+                new("Minutnik", () => SpawnWidget("minutnik")),
+                new("Notatka", () => SpawnWidget("notatka"), "edit"),
+                new("Pogoda", () => SpawnWidget("pogoda")),
+                new("Kalendarz", () => SpawnWidget("kalendarz")),
+            };
+            choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
+        }
+
+        // ---- Widgets ----
+        readonly List<WidgetPanel> m_Widgets = new();
+        NoteWidget m_WritingNote;
+
+        // A widget of a kind ("zegar", "minutnik", "notatka", "pogoda", "kalendarz"), in front of the
+        // user a little above the eyes; move it with its handle
+        WidgetPanel SpawnWidget(string kind)
+        {
+            if (m_Core == null)
+                return null;
+            WidgetPanel widget = kind switch
+            {
+                "zegar" => WidgetPanel.Create<ClockWidget>(transform, m_Core.Head, new Vector2(300f, 190f), "Zegar"),
+                "minutnik" => WidgetPanel.Create<TimerWidget>(transform, m_Core.Head, new Vector2(340f, 220f), "Minutnik"),
+                "notatka" => WidgetPanel.Create<NoteWidget>(transform, m_Core.Head, new Vector2(340f, 280f), "Notatka"),
+                "pogoda" => WidgetPanel.Create<WeatherWidget>(transform, m_Core.Head, new Vector2(360f, 200f), "Pogoda"),
+                "kalendarz" => WidgetPanel.Create<CalendarWidget>(transform, m_Core.Head, new Vector2(380f, 320f), "Kalendarz"),
+                _ => null,
+            };
+            if (widget == null)
+                return null;
+            // Spread out so several don't land on each other
+            float yaw = (m_Widgets.Count % 4 - 1.5f) * 22f;
+            WorldUi.PlaceInFront((RectTransform)widget.transform, m_Core.Head, 1.1f, 14f, yaw);
+            widget.Closed += w =>
+            {
+                m_Widgets.Remove(w);
+                if (w == m_WritingNote)
+                    m_WritingNote = null;
+            };
+            if (widget is NoteWidget note)
+                note.WriteRequested += n => SetWritingNote(n == m_WritingNote ? null : n);
+            m_Widgets.Add(widget);
+            return widget;
+        }
+
+        // Typing (keyboards, dictation) goes into this note until a window is chosen or "Pisz" is pressed again
+        void SetWritingNote(NoteWidget note)
+        {
+            if (m_WritingNote != null)
+                m_WritingNote.SetWriting(false);
+            m_WritingNote = note;
+            if (note != null)
+                note.SetWriting(true);
         }
 
         // The tutorial (Mac and iPad screens) in a window; only one at a time
@@ -595,6 +690,7 @@ namespace CardboardXR.Demos.Workspace
 
         void SetActiveScreen(VirtualScreen screen)
         {
+            SetWritingNote(null); // a window chosen: typing goes to it, not to a note
             m_ActiveScreen = screen;
             if (m_Trackpad != null)
                 m_Trackpad.SetTargetScreen(screen);
@@ -610,7 +706,9 @@ namespace CardboardXR.Demos.Workspace
 
         void OnKeyPressed(char c)
         {
-            if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
+            if (m_WritingNote != null)
+                m_WritingNote.Type(c.ToString());
+            else if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
                 m_PhoneScreen.AppendChatChar(c);
             else if (m_ActiveScreen != null)
                 m_ActiveScreen.AppendChar(c);
@@ -618,7 +716,9 @@ namespace CardboardXR.Demos.Workspace
 
         void OnBackspacePressed()
         {
-            if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
+            if (m_WritingNote != null)
+                m_WritingNote.Backspace();
+            else if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
                 m_PhoneScreen.ChatBackspace();
             else if (m_ActiveScreen != null)
                 m_ActiveScreen.Backspace();
@@ -626,7 +726,9 @@ namespace CardboardXR.Demos.Workspace
 
         void OnEnterPressed()
         {
-            if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
+            if (m_WritingNote != null)
+                m_WritingNote.Type("\n");
+            else if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
                 m_PhoneScreen.SendChatMessage();
             else if (m_ActiveScreen != null)
                 m_ActiveScreen.AppendNewline();
@@ -696,7 +798,11 @@ namespace CardboardXR.Demos.Workspace
             if (VoiceDictation.IsMock)
                 transcribedText = "[głos-demo] " + transcribedText;
 
-            if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
+            if (m_WritingNote != null)
+            {
+                m_WritingNote.Type(" " + transcribedText);
+            }
+            else if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
             {
                 foreach (char c in transcribedText)
                     m_PhoneScreen.AppendChatChar(c);
@@ -724,6 +830,12 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "tryb kinowy": case "kino": case "cinema":
                     ToggleCinemaMode();
+                    break;
+                case "więcej": case "menu": case "more":
+                    OpenMore();
+                    break;
+                case "zegar": case "minutnik": case "notatka": case "pogoda": case "kalendarz":
+                    SpawnWidget(command);
                     break;
                 case "pomoc": case "samouczek": case "help": case "tutorial":
                     OpenTutorial();
@@ -1021,6 +1133,11 @@ namespace CardboardXR.Demos.Workspace
             }
             if (m_PhoneScreen != null)
                 m_RoomAnchors.Keep(m_PhoneScreen.transform, m_PhoneScreen.IsDragging);
+            foreach (var widget in m_Widgets)
+            {
+                if (widget != null)
+                    m_RoomAnchors.Keep(widget.transform, widget.IsDragging);
+            }
             if (m_Keyboard != null && m_Keyboard.gameObject.activeSelf)
                 m_RoomAnchors.Keep(m_Keyboard.transform, false);
             if (m_Trackpad != null && m_Trackpad.gameObject.activeSelf)
@@ -1105,6 +1222,14 @@ namespace CardboardXR.Demos.Workspace
             {
                 m_PhoneScreen.StopDragging();
                 dropped = true;
+            }
+            foreach (var widget in m_Widgets)
+            {
+                if (widget != null && widget.IsDragging)
+                {
+                    widget.StopDragging();
+                    dropped = true;
+                }
             }
             if (dropped)
                 return true;

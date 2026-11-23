@@ -32,6 +32,11 @@ namespace ProjectBootstrap
                 plist.ReadFromFile(plistPath);
                 plist.root.SetString("NSSpeechRecognitionUsageDescription", SpeechUsage);
 
+                // The Workspace's calendar widget (Plugins/iOS/CardboardXRCalendar.mm), read only
+                const string calendarUsage = "CardboardXR shows today's and tomorrow's events in a calendar widget.";
+                plist.root.SetString("NSCalendarsFullAccessUsageDescription", calendarUsage);
+                plist.root.SetString("NSCalendarsUsageDescription", calendarUsage);
+
                 // The Workspace's PC screen reads frames over plain HTTP from a computer on the same
                 // Wi-Fi (RemoteDesktopReceiver). Player Settings allow HTTP, which makes Unity allow it
                 // everywhere (NSAllowsArbitraryLoads); narrow that to the local network only.
@@ -63,6 +68,7 @@ namespace ProjectBootstrap
             // The Workspace's browser (Plugins/iOS/CardboardXRBrowser.mm)
             project.AddFrameworkToProject(framework, "WebKit.framework", false);
             project.AddFrameworkToProject(framework, "Metal.framework", false);
+            project.AddFrameworkToProject(framework, "EventKit.framework", false);
             project.WriteToFile(projectPath);
             Debug.Log("[ProjectSetup] Voice dictation: speech usage text added, Speech.framework linked.");
         }
