@@ -32,7 +32,7 @@ namespace CardboardXR.Demos.Workspace
         static readonly float[] k_ScreenSlotYaws = { 0f, -46f, -92f, 86f, 132f };
         const float k_ScreenPitch = 3f;
         const float k_ScreenRowPitch = 37f;
-        const float k_PhoneYaw = 40f;
+        const float k_PhoneYaw = 50f; // clear of the 9-button dock (~±38 deg) and of the +86 deg slot
         const float k_PhoneDistance = 1.25f;
         const float k_DockPitch = -20f;
         const float k_DeskPitch = -38f;
@@ -193,7 +193,7 @@ namespace CardboardXR.Demos.Workspace
             // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
             const float gap = M3Theme.k_TargetGap;
             const float margin = 16f;
-            string[] labels = { "Monitor", "PC", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj" };
+            string[] labels = { "Ekran", "PC", "Aplikacje", "Telefon", "Głos", "PL", "Kino", "Na blat", "Wyśrodkuj" };
             var widths = new float[labels.Length];
             float total = gap * (labels.Length - 1);
             for (int i = 0; i < labels.Length; i++)
@@ -215,12 +215,13 @@ namespace CardboardXR.Demos.Workspace
 
             Add(0, "NewScreenBtn", M3Button.Variant.Filled, () => CreateNewScreen($"Ekran {m_Screens.Count + 1}"));
             Add(1, "PcScreenBtn", M3Button.Variant.Tonal, CreatePcDesktopScreen);
-            Add(2, "NewPhoneBtn", M3Button.Variant.Filled, SpawnPhoneScreen);
-            m_VoiceBtn = Add(3, "VoiceBtn", M3Button.Variant.Outlined, ToggleVoiceDictation);
-            m_LanguageBtn = Add(4, "LanguageBtn", M3Button.Variant.Text, ToggleDictationLanguage);
-            m_CinemaBtn = Add(5, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
-            m_DeskBtn = Add(6, "DeskBtn", M3Button.Variant.Tonal, BeginDeskPlacement);
-            Add(7, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
+            Add(2, "AppScreenBtn", M3Button.Variant.Tonal, CreateAppScreen);
+            Add(3, "NewPhoneBtn", M3Button.Variant.Filled, SpawnPhoneScreen);
+            m_VoiceBtn = Add(4, "VoiceBtn", M3Button.Variant.Outlined, ToggleVoiceDictation);
+            m_LanguageBtn = Add(5, "LanguageBtn", M3Button.Variant.Text, ToggleDictationLanguage);
+            m_CinemaBtn = Add(6, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
+            m_DeskBtn = Add(7, "DeskBtn", M3Button.Variant.Tonal, BeginDeskPlacement);
+            Add(8, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
 
             WorkspaceSounds.Attach(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
@@ -440,6 +441,7 @@ namespace CardboardXR.Demos.Workspace
             public string title;
             public string text;
             public bool pc;
+            public string app; // with pc: one app's window on the computer
             public int slot;
             public float size = 1f;
             public bool pinned;
@@ -469,6 +471,7 @@ namespace CardboardXR.Demos.Workspace
                     title = screen.Title,
                     text = screen.IsRemoteDesktop ? "" : screen.Text,
                     pc = screen.IsRemoteDesktop,
+                    app = screen.RemoteApp,
                     slot = m_ScreenSlots.TryGetValue(screen, out var slot) ? slot : -1,
                     size = screen.Size,
                     pinned = screen.Pinned,
@@ -507,7 +510,7 @@ namespace CardboardXR.Demos.Workspace
                 if (screen == null)
                     continue;
                 if (item.pc)
-                    screen.EnableRemoteDesktop();
+                    screen.EnableRemoteDesktop(null, string.IsNullOrEmpty(item.app) ? null : item.app);
                 else
                     screen.SetText(item.text);
                 if (item.size > 0f && !Mathf.Approximately(item.size, 1f))
@@ -531,6 +534,14 @@ namespace CardboardXR.Demos.Workspace
         {
             if (paused)
                 SaveWorkspace();
+        }
+
+        // A screen that lists the computer's apps; the one picked becomes this screen (AppPicker)
+        public void CreateAppScreen()
+        {
+            var screen = CreateNewScreen("Wybierz aplikację");
+            if (screen != null)
+                screen.gameObject.AddComponent<AppPicker>().Initialize(screen, screen.Rect);
         }
 
         public void CreatePcDesktopScreen()
@@ -673,6 +684,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "tryb kinowy": case "kino": case "cinema":
                     ToggleCinemaMode();
+                    break;
+                case "aplikacje": case "aplikacja": case "apps":
+                    CreateAppScreen();
                     break;
                 case "telefon": case "smartfon": case "phone":
                     SpawnPhoneScreen();

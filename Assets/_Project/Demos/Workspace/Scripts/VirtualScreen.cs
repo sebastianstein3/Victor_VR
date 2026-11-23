@@ -113,12 +113,29 @@ namespace CardboardXR.Demos.Workspace
             }
         }
 
-        public void EnableRemoteDesktop(string host = null)
+        // The computer's main screen (app null) or one app's window on it (RemoteDesktopReceiver)
+        public string RemoteApp => m_Remote != null ? m_Remote.App : null;
+
+        public void SetTitle(string title)
+        {
+            Title = title;
+            if (m_TitleText != null)
+                m_TitleText.text = "<noparse>" + title + "</noparse>";
+        }
+
+        // Hides or shows the notes text (the app list and the PC picture use the same area)
+        public void ShowBody(bool show)
+        {
+            if (m_BodyText != null)
+                m_BodyText.gameObject.SetActive(show);
+        }
+
+        public void EnableRemoteDesktop(string host = null, string app = null)
         {
             if (m_BodyText != null)
                 m_BodyText.gameObject.SetActive(false);
             m_Remote = gameObject.AddComponent<RemoteDesktopReceiver>();
-            m_Remote.Initialize(m_CanvasRect, host);
+            m_Remote.Initialize(m_CanvasRect, host, app);
         }
 
         // Layout in dp, from the top of a 520 x 440 panel down. Every button is a full 56 dp target

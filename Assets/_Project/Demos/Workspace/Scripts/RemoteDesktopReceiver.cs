@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using CardboardXR.UI;
@@ -30,6 +31,7 @@ namespace CardboardXR.Demos.Workspace
 
         string m_HostAddress;
         int m_Port = k_DefaultPort;
+        string m_App; // one app's window instead of the whole screen (stream_server.py ?app=)
         bool m_IsConnected;
 
         RectTransform m_DisplayRect;
@@ -43,11 +45,14 @@ namespace CardboardXR.Demos.Workspace
 
         public bool IsConnected => m_IsConnected;
         public string HostAddress => m_HostAddress;
+        public string App => m_App;
         public static string HostFile => Path.Combine(Application.persistentDataPath, k_HostFileName);
 
-        // host: "ip" or "ip:port"; null reads Documents/pulpit.txt.
-        public void Initialize(RectTransform parentRect, string host = null)
+        // host: "ip" or "ip:port"; null reads Documents/pulpit.txt. app: one app's window (as the
+        // computer's /windows names it), or null for the whole main screen.
+        public void Initialize(RectTransform parentRect, string host = null, string app = null)
         {
+            m_App = string.IsNullOrEmpty(app) ? null : app;
             ParseHost(host ?? ReadHostFile());
 
             // The picture, inside the window's text area; resized to the computer's aspect once a frame comes
@@ -73,7 +78,7 @@ namespace CardboardXR.Demos.Workspace
                 SetStatus($"Wpisz IP komputera do Documents/{k_HostFileName} i otwórz ekran PC ponownie");
                 return;
             }
-            SetStatus($"Łączenie z {m_HostAddress}:{m_Port}...");
+            SetStatus($"Łączenie z {m_HostAddress}:{m_Port}{(m_App != null ? " (" + m_App + ")" : "")}...");
             StartCoroutine(PollFrames());
         }
 
@@ -104,23 +109,75 @@ namespace CardboardXR.Demos.Workspace
             return null;
         }
 
-        void ParseHost(string host)
+        void ParseHost(string text) => TryParseHost(text, out m_HostAddress, out m_Port);
+
+        // "ip" or "ip:port" -> host and port (k_DefaultPort when not given); false for an empty text.
+        public static bool TryParseHost(string text, out string host, out int port)
         {
-            m_HostAddress = null;
-            m_Port = k_DefaultPort;
-            if (string.IsNullOrWhiteSpace(host))
-                return;
-            host = host.Trim();
-            int colon = host.LastIndexOf(':');
-            if (colon > 0 && int.TryParse(host.Substring(colon + 1), out var port) && port > 0 && port < 65536)
+            host = null;
+            port = k_DefaultPort;
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
+            text = text.Trim();
+            int colon = text.LastIndexOf(':');
+            if (colon > 0 && int.TryParse(text.Substring(colon + 1), out var parsed) && parsed > 0 && parsed < 65536)
             {
-                m_Port = port;
-                host = host.Substring(0, colon);
+                port = parsed;
+                text = text.Substring(0, colon);
             }
-            m_HostAddress = host;
+            host = text;
+            return true;
         }
 
         string Url(string path) => $"http://{m_HostAddress}:{m_Port}{path}";
+
+        string FrameUrl => Url("/frame.jpg") + (m_App != null ? "?app=" + UnityWebRequest.EscapeURL(m_App) : "");
+
+        // ---- The computer's app windows (for the app list) ----
+
+        [Serializable]
+        class WindowInfo
+        {
+            public string app;
+            public string title;
+        }
+
+        [Serializable]
+        class WindowList
+        {
+            public List<WindowInfo> windows = new();
+        }
+
+        // The names of the apps with a visible window on the computer in Documents/pulpit.txt.
+        public static IEnumerator FetchApps(Action<List<string>> done, Action<string> failed)
+        {
+            if (!TryParseHost(ReadHostFile(), out var host, out var port))
+            {
+                failed?.Invoke($"Wpisz IP komputera do Documents/{k_HostFileName}");
+                yield break;
+            }
+            using (var request = UnityWebRequest.Get($"http://{host}:{port}/windows"))
+            {
+                request.timeout = k_TimeoutSeconds;
+                yield return request.SendWebRequest();
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    failed?.Invoke($"Brak połączenia z {host} (czy stream_server.py działa?)");
+                    yield break;
+                }
+                var list = JsonUtility.FromJson<WindowList>(request.downloadHandler.text);
+                var apps = new List<string>();
+                if (list?.windows != null)
+                {
+                    foreach (var window in list.windows)
+                    {
+                        if (!string.IsNullOrEmpty(window.app) && !apps.Contains(window.app))
+                            apps.Add(window.app);
+                    }
+                }
+                done?.Invoke(apps);
+            }
+        }
 
         // ---- Frames ----
 
@@ -132,7 +189,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 bool ok;
                 string error;
-                using (var request = UnityWebRequest.Get(Url("/frame.jpg")))
+                using (var request = UnityWebRequest.Get(FrameUrl))
                 {
                     request.timeout = k_TimeoutSeconds;
                     yield return request.SendWebRequest();
@@ -151,10 +208,12 @@ namespace CardboardXR.Demos.Workspace
                 }
 
                 if (!warned)
-                    Debug.LogWarning($"[RemoteDesktop] {Url("/frame.jpg")}: {error}");
+                    Debug.LogWarning($"[RemoteDesktop] {FrameUrl}: {error}");
                 warned = true;
                 m_IsConnected = false;
-                SetStatus($"Brak połączenia z {m_HostAddress}:{m_Port} (czy stream_server.py działa?)");
+                SetStatus(m_App != null
+                    ? $"Brak okna {m_App} na {m_HostAddress} (zamknięte, zminimalizowane lub brak połączenia)"
+                    : $"Brak połączenia z {m_HostAddress}:{m_Port} (czy stream_server.py działa?)");
                 yield return new WaitForSecondsRealtime(k_RetrySeconds);
             }
         }
@@ -192,7 +251,7 @@ namespace CardboardXR.Demos.Workspace
             float elapsed = Time.unscaledTime - m_FpsSince;
             if (elapsed >= 1f)
             {
-                SetStatus($"PC {m_HostAddress} | {m_Frames / elapsed:F0} kl/s");
+                SetStatus($"{m_App ?? "PC " + m_HostAddress} | {m_Frames / elapsed:F0} kl/s");
                 m_Frames = 0;
                 m_FpsSince = Time.unscaledTime;
             }
@@ -211,17 +270,19 @@ namespace CardboardXR.Demos.Workspace
         {
             if (!TryToScreen(windowDp, out var uv))
                 return false;
-            Post($"{{\"type\":\"{(right ? "rightclick" : "click")}\",\"x\":{F(uv.x)},\"y\":{F(uv.y)}}}");
+            Post($"{{\"type\":\"{(right ? "rightclick" : "click")}\",\"x\":{F(uv.x)},\"y\":{F(uv.y)}{AppField}}}");
             return true;
         }
 
         public void SendText(string text)
         {
             if (!string.IsNullOrEmpty(text))
-                Post($"{{\"type\":\"text\",\"text\":\"{Escape(text)}\"}}");
+                Post($"{{\"type\":\"text\",\"text\":\"{Escape(text)}\"{AppField}}}");
         }
 
-        public void SendKey(string key) => Post($"{{\"type\":\"key\",\"key\":\"{Escape(key.ToLowerInvariant())}\"}}");
+        public void SendKey(string key) => Post($"{{\"type\":\"key\",\"key\":\"{Escape(key.ToLowerInvariant())}\"{AppField}}}");
+
+        string AppField => m_App != null ? $",\"app\":\"{Escape(m_App)}\"" : "";
 
         // Kept for older callers: a click at window dp coordinates.
         public void SendInputEvent(string type, float x, float y) => Click(new Vector2(x, y), type == "rightclick");

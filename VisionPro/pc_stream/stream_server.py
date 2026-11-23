@@ -2,11 +2,18 @@
 """Shows this computer's screen in the Vision Pro DIY headset (Spatial Workspace, "PC" window).
 
 Serves the screen as JPEG frames on the local network:
-    GET  /frame.jpg   the current screen (one frame per request)
-    POST /input       clicks and typing from the headset, ONLY with --allow-input
+    GET  /frame.jpg            the whole main screen (one frame per request)
+    GET  /frame.jpg?app=NAME   only that app's window, so each app can be its own screen in VR
+    GET  /windows              the visible app windows, as JSON (for the headset's app list)
+    POST /input                clicks and typing from the headset, ONLY with --allow-input
+
+A window is captured from the screen where it is, so it must not be covered by another window:
+place the apps side by side (on a big monitor or a large virtual display, e.g. BetterDisplay on
+a Mac mini without a monitor).
 
 Setup:
     pip install mss pillow            # view only
+    pip install pyobjc-framework-Quartz   # macOS: the list of app windows (one app per VR screen)
     pip install pyautogui pyperclip   # also needed for --allow-input
     python stream_server.py                  # view only (safe)
     python stream_server.py --allow-input    # the headset can click and type on this computer
@@ -38,13 +45,63 @@ _capture_lock = threading.Lock()
 _local = threading.local()
 
 
-def grab_jpeg():
-    """The primary monitor as JPEG bytes, at most ARGS.width pixels wide."""
+def list_windows():
+    """Visible app windows: [{"app", "title", "left", "top", "width", "height"}], in the screen
+    coordinates that mss and pyautogui use (points on macOS, pixels on Windows)."""
+    windows = []
+    if sys.platform == "darwin":
+        try:
+            import Quartz  # pip install pyobjc-framework-Quartz
+        except ImportError:
+            return windows
+        options = Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
+        for info in Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []:
+            if info.get("kCGWindowLayer", 1) != 0:  # menus, the Dock, overlays
+                continue
+            bounds = info.get("kCGWindowBounds") or {}
+            width, height = int(bounds.get("Width", 0)), int(bounds.get("Height", 0))
+            if width < 200 or height < 150:
+                continue
+            windows.append({"app": str(info.get("kCGWindowOwnerName", "")), "title": str(info.get("kCGWindowName", "") or ""),
+                            "left": int(bounds.get("X", 0)), "top": int(bounds.get("Y", 0)),
+                            "width": width, "height": height})
+    elif sys.platform == "win32":
+        try:
+            import pygetwindow  # installed with pyautogui on Windows
+        except ImportError:
+            return windows
+        for window in pygetwindow.getAllWindows():
+            if not window.title or window.isMinimized or window.width < 200 or window.height < 150:
+                continue
+            windows.append({"app": window.title, "title": window.title, "left": window.left, "top": window.top,
+                            "width": window.width, "height": window.height})
+    # One entry per app (its largest window), named the way the headset will ask for it
+    best = {}
+    for window in windows:
+        name = window["app"]
+        if name and (name not in best or window["width"] * window["height"] > best[name]["width"] * best[name]["height"]):
+            best[name] = window
+    return sorted(best.values(), key=lambda window: window["app"].lower())
+
+
+def find_region(app):
+    """The screen area to capture: the app's window, or the main screen when app is None."""
+    if app:
+        for window in list_windows():
+            if window["app"] == app:
+                return {"left": window["left"], "top": window["top"], "width": window["width"], "height": window["height"]}
+        raise LookupError(f"no visible window of {app}")
+    left, top, width, height = monitor_size()
+    return {"left": left, "top": top, "width": width, "height": height}
+
+
+def grab_jpeg(app=None):
+    """The main screen, or one app's window, as JPEG bytes at most ARGS.width pixels wide."""
+    region = find_region(app)
     with _capture_lock:
         if not hasattr(_local, "sct"):
             _local.sct = getattr(mss, "MSS", None)() if hasattr(mss, "MSS") else mss.mss()
-        monitor = _local.sct.monitors[1]
-        shot = _local.sct.grab(monitor)
+        shot = _local.sct.grab(region)
     image = Image.frombytes("RGB", shot.size, shot.rgb)
     if image.width > ARGS.width:
         image = image.resize((ARGS.width, round(image.height * ARGS.width / image.width)), Image.BILINEAR)
@@ -59,14 +116,33 @@ def monitor_size():
         return monitor["left"], monitor["top"], monitor["width"], monitor["height"]
 
 
+def activate(app):
+    """Brings the app to the front, so the keys typed in the headset reach it."""
+    if sys.platform == "darwin":
+        import subprocess
+        subprocess.run(["osascript", "-e", f'tell application "{app.replace(chr(34), "")}" to activate'],
+                       check=False, capture_output=True, timeout=3)
+    elif sys.platform == "win32":
+        import pygetwindow
+        for window in pygetwindow.getWindowsWithTitle(app):
+            try:
+                window.activate()
+            except Exception:
+                pass
+            break
+
+
 def handle_input(event):
     import pyautogui  # imported only when input is allowed
     pyautogui.FAILSAFE = True  # moving the real mouse to a screen corner stops it
     kind = event.get("type")
+    app = event.get("app") or None
+    if app:
+        activate(app)  # clicks and typing go to that app
     if kind in ("click", "rightclick"):
-        left, top, width, height = monitor_size()
-        x = left + float(event["x"]) * width
-        y = top + float(event["y"]) * height
+        region = find_region(app)
+        x = region["left"] + float(event["x"]) * region["width"]
+        y = region["top"] + float(event["y"]) * region["height"]
         pyautogui.click(x, y, button="right" if kind == "rightclick" else "left")
     elif kind == "text":
         text = str(event.get("text", ""))
@@ -84,11 +160,25 @@ def handle_input(event):
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.split("?")[0] != "/frame.jpg":
+        from urllib.parse import parse_qs, urlparse
+        url = urlparse(self.path)
+        if url.path == "/windows":
+            body = json.dumps({"windows": list_windows()}, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if url.path != "/frame.jpg":
             self.send_error(404)
             return
+        app = (parse_qs(url.query).get("app") or [None])[0]
         try:
-            data = grab_jpeg()
+            data = grab_jpeg(app)
+        except LookupError as error:  # the app's window is closed, minimised or on another Space
+            self.send_error(404, str(error))
+            return
         except Exception as error:  # e.g. no screen-recording permission on macOS
             print(f"capture error: {error}", file=sys.stderr)
             self.send_error(500, "screen capture failed (macOS: allow Screen Recording for the terminal)")

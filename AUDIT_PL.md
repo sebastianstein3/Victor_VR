@@ -156,7 +156,10 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
    i dyktowanie z `--allow-input`). Adres w `Documents/pulpit.txt`. HTTP w iOS ograniczony do sieci
    lokalnej (ATS `NSAllowsLocalNetworking`). Zostało: Moonlight/WebRTC dla płynności. Pierwotnie: Moonlight/Sunshine (niskie opóźnienie) lub WebRTC (`com.unity.webrtc`);
    input z gładzika/klawiatury jest już kierowany do `RemoteDesktopReceiver`.
-8. WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
+8. **Aplikacje jako osobne ekrany – zrobione**: dock „Aplikacje” → lista okien z komputera
+   (`stream_server.py /windows`) → każda wybrana aplikacja to osobny ekran (`?app=`), zapamiętywany w
+   `workspace.json`. Aplikacji z iPhone'a w goglach nie da się pokazać (ograniczenie iOS). Dalej:
+   WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
 9. Dźwięk przestrzenny okien: `AudioSource` są, ale nic nie gra – podpiąć wideo/pulpit.
 10. Dyktowanie: ~~podgląd na żywo~~ **zrobione** (przycisk „Głos” pokazuje koniec usłyszanego tekstu);
     ~~wybór języka~~ i ~~komendy głosowe~~ **zrobione**: przycisk PL/EN w docku; samo zdanie-komenda
