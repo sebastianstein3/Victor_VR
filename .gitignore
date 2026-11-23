@@ -71,3 +71,9 @@ crashlytics-build.properties
 /[Aa]ssets/StreamingAssets/*.mp4.meta
 !/[Aa]ssets/StreamingAssets/Sample_*.mp4
 !/[Aa]ssets/StreamingAssets/Sample_*.mp4.meta
+
+# OS / tools
+.DS_Store
+Thumbs.db
+*.ipa
+__pycache__/
