@@ -539,6 +539,10 @@ namespace CardboardXR.Demos.Workspace
             return new Rect(0f, (1f - h) / 2f, 1f, h);
         }
 
+        // The clip playing now (for the big cinema screen), or null
+        public Texture PlayingTexture =>
+            m_VideoImage != null && m_VideoImage.enabled && m_Player != null && m_Player.isPlaying ? m_VideoTexture : null;
+
         void StopVideo()
         {
             if (m_Player != null)

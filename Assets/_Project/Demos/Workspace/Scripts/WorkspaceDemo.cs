@@ -165,6 +165,8 @@ namespace CardboardXR.Demos.Workspace
             if (m_ControlDock != null)
                 Destroy(m_ControlDock.gameObject);
 
+            SetCinemaScreen(false);
+
             WorkspaceSounds.Release();
             if (m_AddedListener != null)
                 Destroy(m_AddedListener);
@@ -717,6 +719,53 @@ namespace CardboardXR.Demos.Workspace
                 m_Cinema.ToggleCinemaMode();
                 if (m_CinemaBtn != null)
                     m_CinemaBtn.Selected = m_Cinema.IsCinemaMode;
+                SetCinemaScreen(m_Cinema.IsCinemaMode);
+            }
+        }
+
+        // ---- Cinema screen: in cinema mode, the phone's clip also plays big in front of the user ----
+        // 16:9, ~57 deg wide, 1.3 m away: in front of the windows (1.4 m) and the room dimmer (2.2 m).
+        const float k_CinemaDistance = 1.3f;
+        static readonly Vector2 k_CinemaSize = new(720f, 405f);
+        RectTransform m_CinemaPanel;
+        UnityEngine.UI.RawImage m_CinemaImage;
+        TMPro.TextMeshProUGUI m_CinemaHint;
+
+        void SetCinemaScreen(bool on)
+        {
+            if (!on)
+            {
+                if (m_CinemaPanel != null)
+                    Destroy(m_CinemaPanel.gameObject);
+                m_CinemaPanel = null;
+                return;
+            }
+            if (m_CinemaPanel != null)
+                return;
+            m_CinemaPanel = WorldUi.Panel("Cinema Screen", transform, k_CinemaSize, k_CinemaDistance, Color.black, 12f);
+            var imageRect = M3.Group("CinemaImage", m_CinemaPanel, Vector2.zero, k_CinemaSize);
+            m_CinemaImage = imageRect.gameObject.AddComponent<UnityEngine.UI.RawImage>();
+            m_CinemaImage.raycastTarget = false;
+            m_CinemaImage.enabled = false;
+            m_CinemaHint = M3.Text("CinemaHint", m_CinemaPanel, "Włącz klip w telefonie (TikTok, Shorts, Reels, Twitch)",
+                M3Theme.Type.BodyLarge, Vector2.zero, new Vector2(600f, 40f), M3Theme.OnSurfaceVariant);
+            // In front of where the user looks now (not a slot: it's for watching, not working)
+            WorldUi.PlaceInFront(m_CinemaPanel, m_Core.Head, k_CinemaDistance, k_ScreenPitch, 0f);
+        }
+
+        void UpdateCinemaScreen()
+        {
+            if (m_CinemaPanel == null)
+                return;
+            var texture = m_PhoneScreen != null ? m_PhoneScreen.PlayingTexture : null;
+            bool playing = texture != null;
+            m_CinemaImage.enabled = playing;
+            m_CinemaHint.gameObject.SetActive(!playing);
+            if (playing && m_CinemaImage.texture != texture)
+            {
+                m_CinemaImage.texture = texture;
+                m_CinemaImage.rectTransform.sizeDelta =
+                    RemoteDesktopReceiver.FitInside(texture.width / (float)Mathf.Max(1, texture.height), k_CinemaSize);
             }
         }
 
@@ -874,6 +923,7 @@ namespace CardboardXR.Demos.Workspace
         {
             UpdateHeldPose();
             UpdateRoomAnchors();
+            UpdateCinemaScreen();
 
             // 1. Physical Bluetooth Keyboard Input
             var kb = Keyboard.current;
