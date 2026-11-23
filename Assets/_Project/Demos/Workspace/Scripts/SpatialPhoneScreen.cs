@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using CardboardXR.Interaction;
 using CardboardXR.UI;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.Video;
 
 namespace CardboardXR.Demos.Workspace
@@ -250,6 +252,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void ShowHomeScreen()
         {
+            StopVideo();
             m_Mode = ViewMode.Home;
             m_IsChatFocused = false;
             m_HomeContainer.gameObject.SetActive(true);
@@ -291,6 +294,7 @@ namespace CardboardXR.Demos.Workspace
 
         public void LaunchApp(SocialApp app)
         {
+            FindVideos();
             m_Mode = ViewMode.AppPlayer;
             m_CurrentApp = app;
             m_CurrentClipIndex = 0;
@@ -322,7 +326,13 @@ namespace CardboardXR.Demos.Workspace
 
             // Simulated Video Display Card (Aspect 9:14 inside screen)
             M3.Surface("VideoScreenBg", m_PlayerContainer, new Vector2(0f, 10f),
-                new Vector2(248f, 310f), new Color(0.14f, 0.15f, 0.18f), 20f);
+                new Vector2(k_CardWidth, k_CardHeight), new Color(0.14f, 0.15f, 0.18f), 20f);
+
+            // Where a real clip plays (see PlayVideo); hidden until one is ready
+            var videoRect = M3.Group("VideoImage", m_PlayerContainer, new Vector2(0f, 10f), new Vector2(k_CardWidth, k_CardHeight));
+            m_VideoImage = videoRect.gameObject.AddComponent<RawImage>();
+            m_VideoImage.raycastTarget = false;
+            m_VideoImage.enabled = false;
 
             // Inner video content text
             m_ClipContentText = M3.Text("ClipContent", m_PlayerContainer, "", M3Theme.Type.BodyMedium,
@@ -353,25 +363,154 @@ namespace CardboardXR.Demos.Workspace
             WorkspaceSounds.Attach(this);
         }
 
+        // ---- Real video: clips the user copied to the phone ----
+        // iPhone: the app's Documents/Klipy folder (Finder's Files tab or the Files app can copy into it,
+        // since the app shares Documents). Vertical clips fit best. With none there, the feed apps show
+        // their sample texts as before. The sound goes through the phone's spatial AudioSource, so it
+        // comes from where the phone floats (AirPods with head tracking).
+        static readonly string[] k_VideoExtensions = { ".mp4", ".mov", ".m4v" };
+        const float k_CardWidth = 248f;
+        const float k_CardHeight = 310f;
+        public static string ClipFolder => Path.Combine(Application.persistentDataPath, "Klipy");
+
+        readonly List<string> m_VideoFiles = new();
+        VideoPlayer m_Player;
+        RenderTexture m_VideoTexture;
+        RawImage m_VideoImage;
+
+        bool ShowsVideo => m_VideoFiles.Count > 0 && m_Mode == ViewMode.AppPlayer && m_CurrentApp.name != "Messenger" &&
+                           m_CurrentApp.name != "Notatki";
+        int ClipCount => ShowsVideo ? m_VideoFiles.Count : (m_CurrentApp.sampleClips?.Length ?? 0);
+
+        void FindVideos()
+        {
+            m_VideoFiles.Clear();
+            try
+            {
+                Directory.CreateDirectory(ClipFolder);
+                foreach (var file in Directory.GetFiles(ClipFolder))
+                {
+                    if (Array.IndexOf(k_VideoExtensions, Path.GetExtension(file).ToLowerInvariant()) >= 0)
+                        m_VideoFiles.Add(file);
+                }
+                m_VideoFiles.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[SpatialPhone] Nie można odczytać {ClipFolder}: {e.Message}");
+            }
+            Debug.Log($"[SpatialPhone] Klipy wideo: {m_VideoFiles.Count} w {ClipFolder}");
+        }
+
+        void PlayVideo(int index)
+        {
+            if (m_Player == null)
+            {
+                m_Player = gameObject.AddComponent<VideoPlayer>();
+                m_Player.playOnAwake = false;
+                m_Player.isLooping = true;
+                m_Player.renderMode = VideoRenderMode.RenderTexture;
+                m_Player.audioOutputMode = VideoAudioOutputMode.AudioSource;
+                m_Player.controlledAudioTrackCount = 1;
+                m_Player.SetTargetAudioSource(0, m_SpatialAudio);
+                m_Player.prepareCompleted += OnVideoPrepared;
+                m_Player.errorReceived += (_, message) =>
+                {
+                    Debug.LogWarning($"[SpatialPhone] Błąd wideo: {message}");
+                    if (m_StatusText != null)
+                        m_StatusText.text = "Nie można odtworzyć tego pliku";
+                };
+            }
+            m_Player.Stop();
+            m_Player.source = VideoSource.Url;
+            m_Player.url = m_VideoFiles[index];
+            m_Player.EnableAudioTrack(0, true);
+            m_Player.Prepare();
+            if (m_StatusText != null)
+                m_StatusText.text = Path.GetFileNameWithoutExtension(m_VideoFiles[index]);
+        }
+
+        void OnVideoPrepared(VideoPlayer player)
+        {
+            int width = (int)player.width, height = (int)player.height;
+            if (width <= 0 || height <= 0)
+                return;
+            // At most 1080 px on the long side: the card is small, and the phone renders twice (stereo).
+            float shrink = Mathf.Min(1f, 1080f / Mathf.Max(width, height));
+            int texWidth = Mathf.Max(2, (int)(width * shrink)), texHeight = Mathf.Max(2, (int)(height * shrink));
+            if (m_VideoTexture == null || m_VideoTexture.width != texWidth || m_VideoTexture.height != texHeight)
+            {
+                if (m_VideoTexture != null)
+                    m_VideoTexture.Release();
+                m_VideoTexture = new RenderTexture(texWidth, texHeight, 0);
+            }
+            player.targetTexture = m_VideoTexture;
+            if (m_VideoImage != null)
+            {
+                m_VideoImage.texture = m_VideoTexture;
+                m_VideoImage.uvRect = CropToFill(width / (float)height, k_CardWidth / k_CardHeight);
+                m_VideoImage.enabled = true;
+            }
+            if (m_IsPlaying)
+                player.Play();
+        }
+
+        // The part of a video of aspect videoAspect that fills a frame of aspect frameAspect (cropping
+        // the sides or the top and bottom, never stretching).
+        public static Rect CropToFill(float videoAspect, float frameAspect)
+        {
+            if (videoAspect > frameAspect)
+            {
+                float w = frameAspect / videoAspect;
+                return new Rect((1f - w) / 2f, 0f, w, 1f);
+            }
+            float h = videoAspect / frameAspect;
+            return new Rect(0f, (1f - h) / 2f, 1f, h);
+        }
+
+        void StopVideo()
+        {
+            if (m_Player != null)
+                m_Player.Stop();
+            if (m_VideoImage != null)
+                m_VideoImage.enabled = false;
+        }
+
+        void OnDestroy()
+        {
+            if (m_VideoTexture != null)
+            {
+                m_VideoTexture.Release();
+                Destroy(m_VideoTexture);
+            }
+        }
+
         public void NextClip()
         {
-            if (m_CurrentApp.sampleClips == null || m_CurrentApp.sampleClips.Length == 0)
+            int count = ClipCount;
+            if (count == 0)
                 return;
-            m_CurrentClipIndex = (m_CurrentClipIndex + 1) % m_CurrentApp.sampleClips.Length;
+            m_CurrentClipIndex = (m_CurrentClipIndex + 1) % count;
             UpdateClipDisplay();
         }
 
         public void PrevClip()
         {
-            if (m_CurrentApp.sampleClips == null || m_CurrentApp.sampleClips.Length == 0)
+            int count = ClipCount;
+            if (count == 0)
                 return;
-            m_CurrentClipIndex = (m_CurrentClipIndex - 1 + m_CurrentApp.sampleClips.Length) % m_CurrentApp.sampleClips.Length;
+            m_CurrentClipIndex = (m_CurrentClipIndex - 1 + count) % count;
             UpdateClipDisplay();
         }
 
         public void TogglePlayPause()
         {
             m_IsPlaying = !m_IsPlaying;
+            if (m_Player != null && ShowsVideo)
+            {
+                if (m_IsPlaying) m_Player.Play();
+                else m_Player.Pause();
+            }
             // An icon button has no Label (it is null), so set the icon through M3Button.Icon.
             if (m_PlayPauseBtn != null)
                 m_PlayPauseBtn.Icon = m_IsPlaying ? "pause" : "play_arrow";
@@ -394,6 +533,11 @@ namespace CardboardXR.Demos.Workspace
                     ShowLastPage(m_ClipContentText);
                     if (m_StatusText != null)
                         m_StatusText.text = "Pisz na klawiaturze | Enter wysyła wiadomość";
+                }
+                else if (ShowsVideo)
+                {
+                    m_ClipContentText.text = "";
+                    PlayVideo(m_CurrentClipIndex);
                 }
                 else
                 {

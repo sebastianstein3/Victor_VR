@@ -131,6 +131,21 @@ namespace CardboardXR.Demos.Workspace.Tests
         }
 
         [Test]
+        public void VideoIsCroppedNotStretchedToFillThePhoneCard()
+        {
+            // A 9:16 vertical clip in the 248 x 310 card (0.8): full width, top and bottom cropped
+            var vertical = SpatialPhoneScreen.CropToFill(9f / 16f, 0.8f);
+            Assert.AreEqual(1f, vertical.width, 1e-5f);
+            Assert.AreEqual(0.703125f, vertical.height, 1e-5f);
+            Assert.AreEqual((1f - 0.703125f) / 2f, vertical.y, 1e-5f);
+
+            // A 16:9 clip: full height, sides cropped
+            var wide = SpatialPhoneScreen.CropToFill(16f / 9f, 0.8f);
+            Assert.AreEqual(1f, wide.height, 1e-5f);
+            Assert.AreEqual(0.45f, wide.width, 1e-5f);
+        }
+
+        [Test]
         public void FeedClipsCycleForwardAndBackwardCorrectly()
         {
             int totalClips = 4;

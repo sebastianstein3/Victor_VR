@@ -124,7 +124,11 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
    klawiatury płasko na wykrytym blacie dałoby prawdziwy „opór” stołu i lepsze wykrywanie stuknięć.
 2. **Okna przypięte do pokoju** (kotwice ARKit przez `AnchorPlacer`) zamiast względem głowy przy starcie;
    później zapis układu między uruchomieniami (dziś baza nie ma trwałości kotwic: PlayerPrefs + ARWorldMap).
-3. **Prawdziwe wideo w telefonie / oknie**: demo Video ma gotowe `VideoLibrary`, `DriveLink`,
+3. ~~**Prawdziwe wideo w telefonie**~~ **zrobione (telefon)**: filmy z folderu `Documents/Klipy` na iPhonie
+   (kopiuj przez Finder lub aplikację Pliki; .mp4/.mov/.m4v, najlepiej pionowe) grają w TikTok/Shorts/
+   Reels/Twitch; machnięcie w górę/dół zmienia klip, dźwięk z przestrzennego `AudioSource` telefonu.
+   Bez plików zostają teksty-atrapy. Zostało: linki Google Drive (`DriveDownloader` z dema Video),
+   wideo w dużym oknie. Pierwotny opis:: demo Video ma gotowe `VideoLibrary`, `DriveLink`,
    `DriveDownloader` i `VideoPlayer` (pliki z telefonu i linki Google Drive). Zamiast atrap TikTok/Shorts:
    własne klipy pionowe.
 4. ~~Ostrość dłoni przy pisaniu~~ – **już działa**: `PassthroughHandFocus` jest w scenie Core bazy i
