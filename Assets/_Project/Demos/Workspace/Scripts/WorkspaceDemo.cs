@@ -59,6 +59,22 @@ namespace CardboardXR.Demos.Workspace
         M3Button m_LanguageBtn;
         bool m_GroupDrag; // a held fist is carrying all the windows
         LiveCaptions m_Captions;
+        EnvironmentSphere m_Environment;
+
+        // ---- Environments: the room replaced by a place all around ----
+        public void OpenEnvironmentPicker()
+        {
+            var screen = CreateNewScreen("Środowisko");
+            if (screen == null || m_Environment == null)
+                return;
+            var choices = new List<ChoiceList.Choice> { new(EnvironmentSphere.Room, () => m_Environment.Show(null)) };
+            foreach (var (label, source) in EnvironmentSphere.Find())
+            {
+                string chosen = source;
+                choices.Add(new ChoiceList.Choice(label, () => m_Environment.Show(chosen)));
+            }
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Środowisko", choices);
+        }
 
         public void ToggleCaptions()
         {
@@ -110,6 +126,8 @@ namespace CardboardXR.Demos.Workspace
             m_Voice.Failed += OnVoiceFailed;
             m_Captions = gameObject.AddComponent<LiveCaptions>();
             m_Captions.Initialize(transform, m_Core.Head, m_Voice);
+            m_Environment = gameObject.AddComponent<EnvironmentSphere>();
+            m_Environment.Initialize(m_Core);
             m_Voice.PartialRecognized += OnVoicePartial;
             m_Voice.RecordingStarted += OnVoiceStarted;
             m_Voice.RecordingEnded += OnVoiceEnded;
@@ -195,6 +213,8 @@ namespace CardboardXR.Demos.Workspace
 
             if (m_Captions != null)
                 Destroy(m_Captions); // before the recognizer it listens to
+            if (m_Environment != null)
+                Destroy(m_Environment); // puts passthrough back
 
             if (m_Voice != null)
             {
@@ -616,6 +636,7 @@ namespace CardboardXR.Demos.Workspace
                 new("Pogoda", () => SpawnWidget("pogoda")),
                 new("Kalendarz", () => SpawnWidget("kalendarz")),
                 new("Czytnik PDF", OpenPdfPicker),
+                new("Środowisko", OpenEnvironmentPicker),
             };
             choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
@@ -892,6 +913,12 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "poprzednia strona": case "previous page":
                     m_ActiveScreen?.GetComponent<PdfView>()?.PreviousPage();
+                    break;
+                case "środowisko": case "środowiska": case "environment":
+                    OpenEnvironmentPicker();
+                    break;
+                case "wyłącz środowisko": case "pokój": case "room":
+                    m_Environment?.Show(null);
                     break;
                 case "pdf": case "czytnik": case "dokumenty":
                     OpenPdfPicker();
