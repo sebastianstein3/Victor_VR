@@ -228,3 +228,12 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
   na każde przechwycenie / jeden wątek na ścieżkę WebRTC (bez wycieków, poprawne na Windows/X11),
   odporność na NaN, ujemny `Content-Length`, nazwy aplikacji z polskimi znakami (czyste 404),
   plik tokenu zawsze 0600. Samouczek w aplikacji opisuje token.
+
+### Rozciąganie okien (szerokość i wysokość osobno)
+- Elementy okna są zakotwiczone do krawędzi (nagłówek – góra, stopka i uchwyty – dół, treść – środek),
+  więc zmiana rozmiaru w dp układa okno od nowa. Uchwyt w prawym dolnym rogu: róg podąża za wzrokiem
+  (symetrycznie, okno zostaje na miejscu), koniec uszczypnięciem lub ponownym stuknięciem; głosem „rozciągnij”.
+- Zakres: od domyślnych 520 × 440 dp do 1200 × 900 dp (~95° × 72°); do tego skala -/+ 0,6–2×.
+- Przeglądarka po zakończeniu zmiany rozmiaru przebudowuje stronę (nowy rozmiar WKWebView i tekstury),
+  pulpit PC dopasowuje proporcje obrazu. Rozmiar zapisywany w `workspace.json`.
+- Do sprawdzenia na urządzeniu: płynność zmiany rozmiaru i przebudowa tekstury przeglądarki.

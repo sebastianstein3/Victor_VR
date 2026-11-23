@@ -52,8 +52,14 @@ namespace CardboardXR.Demos.Workspace
 
         // host: "ip" or "ip:port"; null reads Documents/pulpit.txt. app: one app's window (as the
         // computer's /windows names it), or null for the whole main screen.
+        VirtualScreen m_Screen;
+        Vector2 BodyArea => m_Screen != null ? m_Screen.BodySizeNow : VirtualScreen.BodySize;
+
         public void Initialize(RectTransform parentRect, string host = null, string app = null)
         {
+            m_Screen = parentRect.GetComponent<VirtualScreen>();
+            if (m_Screen != null)
+                m_Screen.Resized += OnWindowResized;
             m_App = string.IsNullOrEmpty(app) ? null : app;
             ParseHost(host ?? ReadHostFile());
 
@@ -74,6 +80,8 @@ namespace CardboardXR.Demos.Workspace
             m_StatusText = M3.Text("DesktopStatus", parentRect, "", M3Theme.Type.BodyMedium,
                 VirtualScreen.BodyCenter + new Vector2(0f, -VirtualScreen.BodySize.y / 2f + 14f),
                 new Vector2(VirtualScreen.BodySize.x, 20f), new Color(1f, 0.75f, 0.3f), TextAlignmentOptions.Center);
+            VirtualScreen.AttachToBodyBottom(m_StatusText.rectTransform, 14f, 20f);
+            m_DisplayRect.sizeDelta = BodyArea;
 
             if (string.IsNullOrEmpty(m_HostAddress))
             {
@@ -230,10 +238,14 @@ namespace CardboardXR.Demos.Workspace
             if (!Mathf.Approximately(aspect, m_FrameAspect))
             {
                 m_FrameAspect = aspect;
-                m_DisplayRect.sizeDelta = FitInside(aspect, VirtualScreen.BodySize);
+                m_DisplayRect.sizeDelta = FitInside(aspect, BodyArea);
             }
         }
 #endif
+
+        // The window was stretched: fit the picture into its new text area (centred at the same place)
+        void OnWindowResized(VirtualScreen screen) =>
+            m_DisplayRect.sizeDelta = m_FrameAspect > 0f ? FitInside(m_FrameAspect, BodyArea) : BodyArea;
 
         // ---- Frames ----
 
@@ -297,7 +309,7 @@ namespace CardboardXR.Demos.Workspace
             if (!Mathf.Approximately(aspect, m_FrameAspect))
             {
                 m_FrameAspect = aspect;
-                m_DisplayRect.sizeDelta = FitInside(aspect, VirtualScreen.BodySize);
+                m_DisplayRect.sizeDelta = FitInside(aspect, BodyArea);
             }
             return true;
         }
@@ -417,6 +429,8 @@ namespace CardboardXR.Demos.Workspace
 
         void OnDestroy()
         {
+            if (m_Screen != null)
+                m_Screen.Resized -= OnWindowResized;
             if (m_DesktopTexture != null)
                 Destroy(m_DesktopTexture);
             if (m_FrameTexture != null)

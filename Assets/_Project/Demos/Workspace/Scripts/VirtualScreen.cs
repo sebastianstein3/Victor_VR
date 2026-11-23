@@ -83,6 +83,7 @@ namespace CardboardXR.Demos.Workspace
             m_SpatialAudio.maxDistance = 10f;
 
             BuildInterface(title);
+            AnchorToEdges();
             WorkspaceSounds.Attach(this);
             BuildVirtualCursor();
             UpdateContentDisplay();
@@ -105,8 +106,9 @@ namespace CardboardXR.Demos.Workspace
         public void MoveCursorDelta(Vector2 delta)
         {
             m_CursorPos += delta;
-            m_CursorPos.x = Mathf.Clamp(m_CursorPos.x, -k_DefaultWidth / 2f + 16f, k_DefaultWidth / 2f - 16f);
-            m_CursorPos.y = Mathf.Clamp(m_CursorPos.y, -k_DefaultHeight / 2f + 16f, k_DefaultHeight / 2f - 16f);
+            var half = LayoutSize / 2f;
+            m_CursorPos.x = Mathf.Clamp(m_CursorPos.x, -half.x + 16f, half.x - 16f);
+            m_CursorPos.y = Mathf.Clamp(m_CursorPos.y, -half.y + 16f, half.y - 16f);
             if (m_CursorRect != null)
             {
                 m_CursorRect.anchoredPosition = m_CursorPos;
@@ -191,7 +193,11 @@ namespace CardboardXR.Demos.Workspace
 
             // 4. Bottom Grab Bar (Grab to drag anywhere in the room)
             m_GrabButton = M3.Button("GrabBar", m_CanvasRect, "Chwyć, aby przenieść ekran", M3Button.Variant.Tonal,
-                new Vector2(0f, k_GrabY), OnGrabClicked, "open_with", k_DefaultWidth - 60f);
+                new Vector2(-40f, k_GrabY), OnGrabClicked, "open_with", k_DefaultWidth - 140f);
+
+            // 5. Stretch handle, bottom-right corner: the corner then follows the gaze (StartStretching)
+            m_StretchButton = M3.IconButton("StretchBtn", m_CanvasRect, "aspect_ratio", M3Button.Variant.Tonal,
+                new Vector2(200f, k_GrabY), ToggleStretching, M3.k_ButtonHeight);
         }
 
         // The area the remote desktop picture fills, the same as the text area.
@@ -215,6 +221,139 @@ namespace CardboardXR.Demos.Workspace
             transform.localScale *= size / m_Size;
             m_Size = size;
             Focused?.Invoke(this);
+        }
+
+        // ---- Stretching: width and height on their own (the layout follows the edges) ----
+        // The elements are anchored to the window's edges (AnchorToEdges): header to the top, footer and
+        // grab bar to the bottom, the text area between them. So changing the window's size in dp lays it
+        // out again by itself; the window stays centred where it is. The body's centre stays at
+        // (0, k_BodyY) whatever the size, since its top and bottom margins are fixed.
+        const float k_TopMargin = 80f;     // window top -> text area
+        const float k_BottomMargin = 140f; // text area -> window bottom (footer row and grab bar)
+        const float k_SideMargin = 30f;
+        public static Vector2 MinLayoutSize => new(k_DefaultWidth, k_DefaultHeight);
+        public static Vector2 MaxLayoutSize => new(1200f, 900f); // ~95 x 72 degrees at 1x
+
+        M3Button m_StretchButton;
+        bool m_IsStretching;
+        public bool IsStretching => m_IsStretching;
+        public event Action<VirtualScreen> Resized;
+
+        public Vector2 LayoutSize => m_CanvasRect != null ? m_CanvasRect.sizeDelta : new Vector2(k_DefaultWidth, k_DefaultHeight);
+        public Vector2 BodySizeNow => LayoutSize - new Vector2(2f * k_SideMargin, k_TopMargin + k_BottomMargin);
+
+        public void SetLayoutSize(Vector2 size)
+        {
+            size = Vector2.Max(MinLayoutSize, Vector2.Min(MaxLayoutSize, size));
+            if ((size - m_CanvasRect.sizeDelta).sqrMagnitude < 0.25f)
+                return;
+            m_CanvasRect.sizeDelta = size;
+            MoveCursorDelta(Vector2.zero); // keep the cursor inside
+            Resized?.Invoke(this);
+        }
+
+        public void StartStretching()
+        {
+            if (m_IsDragging)
+                StopDragging();
+            m_IsStretching = true;
+            if (m_StretchButton != null)
+                m_StretchButton.Selected = true;
+            Focused?.Invoke(this);
+        }
+
+        public void StopStretching()
+        {
+            m_IsStretching = false;
+            if (m_StretchButton != null)
+                m_StretchButton.Selected = false;
+        }
+
+        void ToggleStretching()
+        {
+            if (m_IsStretching)
+                StopStretching();
+            else
+                StartStretching();
+        }
+
+        // While stretching: the corner goes under the gaze (symmetric about the centre: the window stays put)
+        void UpdateStretching()
+        {
+            var plane = new Plane(transform.forward, transform.position);
+            var ray = new Ray(m_Head.position, m_Head.forward);
+            if (!plane.Raycast(ray, out float distance))
+                return;
+            Vector2 local = m_CanvasRect.InverseTransformPoint(ray.GetPoint(distance)); // dp
+            // The handle's centre is 60 dp in from the right edge and 44 dp up from the bottom
+            var target = new Vector2(2f * (Mathf.Abs(local.x) + 60f), 2f * (Mathf.Abs(local.y) + 44f));
+            SetLayoutSize(Vector2.Lerp(LayoutSize, target, Time.unscaledDeltaTime * 8f));
+        }
+
+        // Anchors the window's elements to its edges, so that SetLayoutSize lays them out (called once, at
+        // the default size). Offsets are the default layout's, measured from the edge they follow.
+        void AnchorToEdges()
+        {
+            AtTopLeftToRight(m_TitleText.rectTransform, 20f, 140f, 32f, 40f);
+            Pin("PinBtn", new Vector2(1f, 1f), new Vector2(-98f, -32f));
+            Pin("CloseBtn", new Vector2(1f, 1f), new Vector2(-34f, -32f));
+            AtTopLeftToRight((RectTransform)m_CanvasRect.Find("HeaderDivider"), 20f, 20f, 72f, 2f);
+            AttachToBody(m_BodyText.rectTransform);
+            Pin("Footer", new Vector2(0f, 0f), new Vector2(130f, 112f));
+            Pin("SmallerBtn", new Vector2(0.5f, 0f), new Vector2(20f, 112f));
+            Pin("LargerBtn", new Vector2(0.5f, 0f), new Vector2(84f, 112f));
+            Pin("ClearBtn", new Vector2(1f, 0f), new Vector2(-70f, 112f));
+            Pin("GrabBar", new Vector2(0f, 0f), new Vector2(220f, 44f));
+            Pin("StretchBtn", new Vector2(1f, 0f), new Vector2(-60f, 44f));
+        }
+
+        void Pin(string child, Vector2 anchor, Vector2 position)
+        {
+            var rect = m_CanvasRect.Find(child) as RectTransform;
+            if (rect != null)
+                PinTo(rect, anchor, position);
+        }
+
+        // ---- For what other components add to the window (browser, PC picture) ----
+
+        // At a fixed offset from an edge/corner point of the window (anchor 0..1 on each axis)
+        public static void PinTo(RectTransform rect, Vector2 anchor, Vector2 position)
+        {
+            rect.anchorMin = anchor;
+            rect.anchorMax = anchor;
+            rect.anchoredPosition = position;
+        }
+
+        // Fills the text area, whatever the window's size
+        public static void AttachToBody(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(k_SideMargin, k_BottomMargin);
+            rect.offsetMax = new Vector2(-k_SideMargin, -k_TopMargin);
+        }
+
+        // A line across the text area, its centre `up` dp above the area's bottom
+        public static void AttachToBodyBottom(RectTransform rect, float up, float height)
+        {
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.offsetMin = new Vector2(k_SideMargin, k_BottomMargin + up - height / 2f);
+            rect.offsetMax = new Vector2(-k_SideMargin, k_BottomMargin + up + height / 2f);
+        }
+
+        // In the footer row, x from the window's left (anchorX 0), centre (0.5) or right (1)
+        public static void PinToFooter(RectTransform rect, float anchorX, float x) =>
+            PinTo(rect, new Vector2(anchorX, 0f), new Vector2(x, 112f));
+
+        static void AtTopLeftToRight(RectTransform rect, float left, float right, float fromTop, float height)
+        {
+            if (rect == null)
+                return;
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.offsetMin = new Vector2(left, -fromTop - height / 2f);
+            rect.offsetMax = new Vector2(-right, -fromTop + height / 2f);
         }
 
         public static Vector2 BodyCenter => new(0f, k_BodyY);
@@ -281,7 +420,7 @@ namespace CardboardXR.Demos.Workspace
         }
 
         bool CursorInsideBody() =>
-            Mathf.Abs(m_CursorPos.x - BodyCenter.x) <= BodySize.x / 2f && Mathf.Abs(m_CursorPos.y - BodyCenter.y) <= BodySize.y / 2f;
+            Mathf.Abs(m_CursorPos.x - BodyCenter.x) <= BodySizeNow.x / 2f && Mathf.Abs(m_CursorPos.y - BodyCenter.y) <= BodySizeNow.y / 2f;
 
         bool CursorIsOver(RectTransform rect)
         {
@@ -372,6 +511,8 @@ namespace CardboardXR.Demos.Workspace
 
         public void StartDragging()
         {
+            if (m_IsStretching)
+                StopStretching();
             if (m_Pinned)
                 return;
             m_IsDragging = true;
@@ -417,6 +558,9 @@ namespace CardboardXR.Demos.Workspace
 
         void Update()
         {
+            if (m_IsStretching && m_Head != null && m_CanvasRect != null)
+                UpdateStretching();
+
             if (m_IsDragging && m_Head != null && m_CanvasRect != null)
             {
                 // Carried where it was in the view when the drag began (not snapped to the view's centre),

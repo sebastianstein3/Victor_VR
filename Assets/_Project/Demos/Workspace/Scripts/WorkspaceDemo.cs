@@ -449,6 +449,8 @@ namespace CardboardXR.Demos.Workspace
             public string url; // with browser: the page
             public int slot;
             public float size = 1f;
+            public float width;  // the window's stretched size in dp (0: default)
+            public float height;
             public bool pinned;
         }
 
@@ -482,6 +484,8 @@ namespace CardboardXR.Demos.Workspace
                     url = screen.IsBrowser ? screen.Browser.Url : null,
                     slot = m_ScreenSlots.TryGetValue(screen, out var slot) ? slot : -1,
                     size = screen.Size,
+                    width = screen.LayoutSize.x,
+                    height = screen.LayoutSize.y,
                     pinned = screen.Pinned,
                 });
             }
@@ -523,6 +527,8 @@ namespace CardboardXR.Demos.Workspace
                     screen.EnableRemoteDesktop(null, string.IsNullOrEmpty(item.app) ? null : item.app);
                 else
                     screen.SetText(item.text);
+                if (item.width > 0f && item.height > 0f)
+                    screen.SetLayoutSize(new Vector2(item.width, item.height));
                 if (item.size > 0f && !Mathf.Approximately(item.size, 1f))
                     screen.SetSize(item.size);
                 screen.SetPinned(item.pinned);
@@ -727,6 +733,10 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "prywatna przeglądarka": case "tryb prywatny": case "private browser":
                     CreateBrowserScreen(null, true);
+                    break;
+                case "rozciągnij": case "rozciągnij okno": case "stretch":
+                    if (m_ActiveScreen != null)
+                        m_ActiveScreen.StartStretching();
                     break;
                 case "większe okno": case "powiększ": case "bigger":
                     if (m_ActiveScreen != null)
@@ -1070,6 +1080,12 @@ namespace CardboardXR.Demos.Workspace
                 if (screen != null && screen.IsDragging)
                 {
                     screen.StopDragging();
+                    dropped = true;
+                }
+                // Stretching ends the same way: a pinch anywhere sets the size
+                if (screen != null && screen.IsStretching)
+                {
+                    screen.StopStretching();
                     dropped = true;
                 }
             }

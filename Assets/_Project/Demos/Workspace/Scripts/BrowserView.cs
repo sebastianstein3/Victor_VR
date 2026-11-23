@@ -23,8 +23,13 @@ namespace CardboardXR.Demos.Workspace
     public class BrowserView : MonoBehaviour
     {
         public const string k_HomePage = "https://duckduckgo.com/";
-        const int k_TextureWidth = 920;   // 2 px per dp of the window's text area (460 x 220 dp)
+        const int k_TextureWidth = 920;   // 2 px per dp of the window's text area (460 x 220 dp by default)
         const int k_TextureHeight = 440;
+        const float k_ResizeDelay = 0.4f; // after the window stops changing size, the page is laid out again
+        int m_TextureWidth = k_TextureWidth;
+        int m_TextureHeight = k_TextureHeight;
+        bool m_ResizePending;
+        float m_ResizeAt;
         const float k_FrameInterval = 0.05f;     // ~20 fps while looked at
         const float k_IdleFrameInterval = 0.5f;  // 2 fps when not
         const float k_LookedAtDegrees = 35f;
@@ -67,8 +72,8 @@ namespace CardboardXR.Demos.Workspace
             var pageObject = new GameObject("BrowserPage", typeof(RectTransform));
             pageObject.transform.SetParent(canvas, false);
             m_PageRect = (RectTransform)pageObject.transform;
-            m_PageRect.anchoredPosition = VirtualScreen.BodyCenter;
-            m_PageRect.sizeDelta = VirtualScreen.BodySize;
+            VirtualScreen.AttachToBody(m_PageRect);
+            m_Screen.Resized += OnWindowResized;
             m_Page = pageObject.AddComponent<RawImage>();
             m_Page.color = Color.white;
             pageObject.transform.SetAsFirstSibling();
@@ -78,21 +83,29 @@ namespace CardboardXR.Demos.Workspace
             m_Progress = M3.Surface("BrowserProgress", canvas,
                 VirtualScreen.BodyCenter + new Vector2(0f, VirtualScreen.BodySize.y / 2f - 2f), new Vector2(0f, 4f),
                 M3Theme.Primary, 0f).rectTransform;
+            VirtualScreen.PinTo(m_Progress, new Vector2(0f, 1f), new Vector2(30f, -82f));
             m_Progress.gameObject.SetActive(false);
 
             m_Status = M3.Text("BrowserStatus", canvas, "", M3Theme.Type.BodyMedium,
                 VirtualScreen.BodyCenter + new Vector2(0f, -VirtualScreen.BodySize.y / 2f + 14f),
                 new Vector2(VirtualScreen.BodySize.x, 20f), new Color(0.15f, 0.15f, 0.2f), TextAlignmentOptions.Center);
+            VirtualScreen.AttachToBodyBottom(m_Status.rectTransform, 14f, 20f);
 
             // Footer: back, forward, reload (left), the window's own - / + (middle), address (right)
             float y = VirtualScreen.FooterY;
             // back, forward, reload, Aa (text size) | the window's - / + (size) | Adres
-            M3.IconButton("BrowserBack", canvas, "chevron_left", M3Button.Variant.Text, new Vector2(-205f, y), Back, 48f);
-            M3.IconButton("BrowserForward", canvas, "chevron_right", M3Button.Variant.Text, new Vector2(-153f, y), Forward, 48f);
-            M3.IconButton("BrowserReload", canvas, "refresh", M3Button.Variant.Text, new Vector2(-101f, y), Reload, 48f);
-            M3.Button("BrowserTextSize", canvas, "Aa", M3Button.Variant.Text, new Vector2(-45f, y), CycleTextSize, null, 48f);
+            var back = M3.IconButton("BrowserBack", canvas, "chevron_left", M3Button.Variant.Text, new Vector2(-205f, y), Back, 48f);
+            var forward = M3.IconButton("BrowserForward", canvas, "chevron_right", M3Button.Variant.Text, new Vector2(-153f, y), Forward, 48f);
+            var reload = M3.IconButton("BrowserReload", canvas, "refresh", M3Button.Variant.Text, new Vector2(-101f, y), Reload, 48f);
+            var textSize = M3.Button("BrowserTextSize", canvas, "Aa", M3Button.Variant.Text, new Vector2(-45f, y), CycleTextSize, null, 48f);
+            // Footer positions from the window's left edge (it can be stretched)
+            VirtualScreen.PinToFooter((RectTransform)back.transform, 0f, 55f);
+            VirtualScreen.PinToFooter((RectTransform)forward.transform, 0f, 107f);
+            VirtualScreen.PinToFooter((RectTransform)reload.transform, 0f, 159f);
+            VirtualScreen.PinToFooter((RectTransform)textSize.transform, 0f, 215f);
             m_AddressBtn = M3.Button("BrowserAddress", canvas, "Adres", M3Button.Variant.Tonal, new Vector2(180f, y),
                 ToggleAddressMode, null, 110f);
+            VirtualScreen.PinToFooter((RectTransform)m_AddressBtn.transform, 1f, -80f);
             WorkspaceSounds.Attach(screen);
 
 #if UNITY_IOS && !UNITY_EDITOR
@@ -268,6 +281,8 @@ namespace CardboardXR.Demos.Workspace
             if (m_Id == 0)
                 return;
             UpdateProgress(CardboardXR_BrowserProgress(m_Id));
+            if (m_ResizePending && Time.unscaledTime >= m_ResizeAt && !m_Screen.IsStretching)
+                ApplyTextureSize();
             if (Time.unscaledTime < m_NextFrame)
                 return;
             m_NextFrame = Time.unscaledTime + (IsLookedAt() ? k_FrameInterval : k_IdleFrameInterval);
@@ -280,6 +295,47 @@ namespace CardboardXR.Demos.Workspace
                 m_Texture.LoadRawTextureData(m_Buffer);
                 m_Texture.Apply(false);
             }
+#endif
+        }
+
+        void OnWindowResized(VirtualScreen screen)
+        {
+            m_ResizePending = true;
+            m_ResizeAt = Time.unscaledTime + k_ResizeDelay;
+        }
+
+        // A new page size (2 px per dp of the text area): the web view is laid out again at it, like a
+        // desktop browser window being resized, instead of the old picture being stretched
+        void ApplyTextureSize()
+        {
+            m_ResizePending = false;
+#if UNITY_IOS && !UNITY_EDITOR
+            var area = m_Screen.BodySizeNow;
+            int width = Mathf.Clamp(Mathf.RoundToInt(area.x * 2f), 64, 2048);
+            int height = Mathf.Clamp(Mathf.RoundToInt(area.y * 2f), 64, 2048);
+            if (m_Id == 0 || (width == m_TextureWidth && height == m_TextureHeight))
+                return;
+            CardboardXR_BrowserSetTexture(m_Id, IntPtr.Zero);
+            CardboardXR_BrowserResize(m_Id, width, height);
+            var old = m_Texture;
+            m_TextureWidth = width;
+            m_TextureHeight = height;
+            m_Texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            m_Texture.Apply(false);
+            m_Page.texture = m_Texture;
+            if (m_DirectTexture)
+            {
+                CardboardXR_BrowserSetTexture(m_Id, m_Texture.GetNativeTexturePtr());
+            }
+            else
+            {
+                if (m_BufferHandle.IsAllocated)
+                    m_BufferHandle.Free();
+                m_Buffer = new byte[width * height * 4];
+                m_BufferHandle = GCHandle.Alloc(m_Buffer, GCHandleType.Pinned);
+            }
+            if (old != null)
+                Destroy(old);
 #endif
         }
 
@@ -298,10 +354,10 @@ namespace CardboardXR.Demos.Workspace
                 m_Progress.gameObject.SetActive(show);
             if (show)
             {
-                float width = VirtualScreen.BodySize.x * Mathf.Clamp01(progress);
+                // From the text area's top-left corner (30 dp in, 80 dp down), as wide as the progress
+                float width = m_PageRect.rect.width * Mathf.Clamp01(progress);
                 m_Progress.sizeDelta = new Vector2(width, 4f);
-                m_Progress.anchoredPosition = VirtualScreen.BodyCenter +
-                    new Vector2(-VirtualScreen.BodySize.x / 2f + width / 2f, VirtualScreen.BodySize.y / 2f - 2f);
+                m_Progress.anchoredPosition = new Vector2(30f + width / 2f, -82f);
             }
         }
 
@@ -384,6 +440,8 @@ namespace CardboardXR.Demos.Workspace
 
         void OnDestroy()
         {
+            if (m_Screen != null)
+                m_Screen.Resized -= OnWindowResized;
 #if UNITY_IOS && !UNITY_EDITOR
             if (m_Id != 0)
             {
@@ -421,6 +479,7 @@ namespace CardboardXR.Demos.Workspace
         [DllImport("__Internal")] static extern int CardboardXR_BrowserUpdateTexture(int id);
         [DllImport("__Internal")] static extern float CardboardXR_BrowserProgress(int id);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserSetZoom(int id, float zoom);
+        [DllImport("__Internal")] static extern void CardboardXR_BrowserResize(int id, int width, int height);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserDestroy(int id);
         [DllImport("__Internal")] static extern int CardboardXR_BrowserLoad(int id, string url);
         [DllImport("__Internal")] static extern void CardboardXR_BrowserGoBack(int id);

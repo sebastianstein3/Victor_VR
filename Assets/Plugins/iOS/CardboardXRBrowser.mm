@@ -312,6 +312,27 @@ extern "C" void CardboardXR_BrowserDestroy(int identifier)
     [s_Browsers removeObjectForKey:@(identifier)];
 }
 
+// A new page size in pixels (the window was stretched): the web view is laid out again at half that in
+// points; the bitmap is made again on the next capture. Call SetTexture with a texture of the new size.
+extern "C" void CardboardXR_BrowserResize(int identifier, int width, int height)
+{
+    CXRBrowser* browser = Find(identifier);
+    if (browser == nil || width < 64 || height < 64 || width > 2048 || height > 2048)
+        return;
+    browser.texture = nil;
+    browser.hasNewFrame = NO;
+    if (browser.context != NULL)
+    {
+        CGContextRelease(browser.context);
+        browser.context = NULL;
+    }
+    free(browser.pixels);
+    browser.pixels = NULL;
+    browser.width = width;
+    browser.height = height;
+    browser.webView.frame = CGRectMake(0, 0, width / 2.0, height / 2.0);
+}
+
 // Unity's texture (Texture2D.GetNativeTexturePtr, Metal) to write frames into; NULL to stop.
 extern "C" void CardboardXR_BrowserSetTexture(int identifier, void* texture)
 {

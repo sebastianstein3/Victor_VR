@@ -51,7 +51,8 @@ namespace CardboardXR.Demos.Workspace
             "Klik: spójrz na przycisk i uszczypnij.\n" +
             "Kursor: gładzik biurkowy lub mysz Bluetooth; stuknięcie = klik, dwa palce = prawy klik.\n" +
             "Pisanie: klawiatura biurkowa, Bluetooth albo <b>Głos</b>.\n" +
-            "Rozmiar okna: <b>-</b> / <b>+</b> pod oknem (do 2x) albo „większe okno”.\n" +
+            "Rozciąganie: uchwyt w prawym dolnym rogu, potem prowadź wzrokiem róg, uszczypnij = koniec.\n" +
+            "Skala całego okna: <b>-</b> / <b>+</b> (do 2x).\n" +
             "<b>Wyśrodkuj</b> ustawia wszystko przed Tobą.",
 
             "<b>Gdy coś nie działa</b>\n\n" +

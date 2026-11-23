@@ -118,7 +118,8 @@ działający na iPhonie, wyświetlany jako okno w VR.
 | Prawy klik | Stuknięcie dwoma palcami / prawy przycisk myszy |
 | Pisanie | Klawiatura biurkowa, klawiatura Bluetooth albo przycisk **Głos** (dyktowanie) |
 | Przeniesienie okna | Przycisk „Chwyć…” pod oknem, obróć głowę, uszczypnij, aby odłożyć |
-| Rozmiar okna | **-** / **+** pod oknem (0,6–2×) albo głosem „większe okno” / „mniejsze okno” |
+| Rozciąganie okna (szerokość i wysokość osobno) | Uchwyt w **prawym dolnym rogu** okna → róg podąża za wzrokiem → uszczypnij (albo stuknij uchwyt), aby zakończyć. Głosem: „rozciągnij”. Przeglądarka układa wtedy stronę od nowa pod nowy rozmiar |
+| Skala całego okna (z tekstem) | **-** / **+** pod oknem (0,6–2×) albo głosem „większe okno” / „mniejsze okno” |
 | Rozmiar tekstu strony (przeglądarka) | **Aa** pod oknem albo „większy tekst” / „mniejszy tekst” |
 | Wszystko przed siebie | **Wyśrodkuj** w docku |
 

@@ -23,7 +23,7 @@ ON_SURF, ON_SURF_VAR = hexc(0xE6E0E9), hexc(0xCAC4D0)
 OUTLINE, OUTLINE_VAR = hexc(0x938F99), hexc(0x49454F)
 BACKGROUND = (28, 40, 54)
 
-ICONS = {"check": 0xe5ca, "close": 0xe5cd, "open_with": 0xe89f, "chevron_left": 0xe5cb, "chevron_right": 0xe5cc,
+ICONS = {"aspect_ratio": 0xe85b, "check": 0xe5ca, "close": 0xe5cd, "open_with": 0xe89f, "chevron_left": 0xe5cb, "chevron_right": 0xe5cc,
          "refresh": 0xe5d5, "bolt": 0xea0b, "auto_awesome": 0xe65f, "play_arrow": 0xe037, "movie": 0xe02c,
          "visibility": 0xe8f4, "edit": 0xe3c9, "home": 0xe88a}
 
@@ -81,13 +81,18 @@ def button_width(label, icon=None):
 
 # ---- The panels, as the C# builds them ----
 
-def window_frame(title):
-    p = Panel(520, 440, SURF, 28)
-    p.text(-240, 188, title, 16, ON_SURF, True, anchor="lm")
-    p.icon_button(162, 188, "check", "outlined")
-    p.icon_button(226, 188, "close", "text")
-    p.rect(0, 148, 480, 2, OUTLINE_VAR)
-    p.button(0, -176, "Chwyć, aby przenieść ekran", "tonal", "open_with", 460)
+def window_frame(title, w=520, h=440):
+    """A VirtualScreen at layout size w x h dp: header follows the top, footer/grab the bottom."""
+    p = Panel(w, h, SURF, 28)
+    top, bottom, left, right = h / 2, -h / 2, -w / 2, w / 2
+    p.text(left + 20, top - 32, title, 16, ON_SURF, True, anchor="lm")
+    p.icon_button(right - 98, top - 32, "check", "outlined")
+    p.icon_button(right - 34, top - 32, "close", "text")
+    p.rect(0, top - 72, w - 40, 2, OUTLINE_VAR)
+    p.button(left + 220, bottom + 44, "Chwyć, aby przenieść ekran", "tonal", "open_with", 380)
+    p.icon_button(right - 60, bottom + 44, "aspect_ratio", "tonal")
+    p.footer_y = bottom + 112
+    p.body = (left + 30, top - 80, right - 30, bottom + 140)  # x0, y0 (top), x1, y1 (bottom)
     return p
 
 def notepad():
@@ -101,23 +106,32 @@ def notepad():
     p.button(190, -108, "Wyczyść", "text", width=110)
     return p
 
-def browser():
-    p = window_frame("DuckDuckGo — Prywatność, uproszczona.")
-    # dark mode page (the browser asks sites for dark mode)
-    p.rect(0, 30, 460, 220, (28, 28, 30, 255), 4)
-    p.rect(-230 + 140, 138, 280, 4, PRIMARY)  # loading progress, 60%
-    p.d.ellipse([*p.p(-36, 120), *p.p(36, 48)], fill=(222, 88, 51, 255))
-    p.text(0, 84, "D", 40, (255, 255, 255, 255), True)
-    p.text(0, 28, "DuckDuckGo", 22, (240, 240, 240, 255), True)
-    p.rect(0, -16, 360, 40, (52, 52, 56, 255), 20, outline=(80, 80, 86, 255))
-    p.text(-160, -16, "Szukaj w internecie bez śledzenia", 14, (170, 170, 178, 255), anchor="lm")
-    p.text(0, -66, "Szyfrowane · duckduckgo.com", 14, (90, 200, 120, 255))
-    for x, name in ((-205, "chevron_left"), (-153, "chevron_right"), (-101, "refresh")):
-        p.icon_button(x, -108, name, "text", 48)
-    p.button(-45, -108, "Aa", "text", width=48)
-    p.button(20, -108, "-", "text", width=56)
-    p.button(84, -108, "+", "text", width=56)
-    p.button(180, -108, "Adres", "tonal", width=110)
+def browser(w=520, h=440, title="DuckDuckGo — Prywatność, uproszczona."):
+    p = window_frame(title, w, h)
+    x0, y0, x1, y1 = p.body
+    cx, cy, bw, bh = (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y0 - y1
+    # dark mode page (the browser asks sites for dark mode), laid out for the window's size
+    p.rect(cx, cy, bw, bh, (28, 28, 30, 255), 4)
+    p.rect(x0 + bw * 0.3, y0 - 2, bw * 0.6, 4, PRIMARY)  # loading progress, 60%
+    p.d.ellipse([*p.p(cx - 36, cy + 90), *p.p(cx + 36, cy + 18)], fill=(222, 88, 51, 255))
+    p.text(cx, cy + 54, "D", 40, (255, 255, 255, 255), True)
+    p.text(cx, cy - 2, "DuckDuckGo", 22, (240, 240, 240, 255), True)
+    p.rect(cx, cy - 46, min(560, bw - 100), 40, (52, 52, 56, 255), 20, outline=(80, 80, 86, 255))
+    p.text(cx - min(560, bw - 100) / 2 + 20, cy - 46, "Szukaj w internecie bez śledzenia", 14, (170, 170, 178, 255), anchor="lm")
+    if bh > 300:  # more of the page fits in a taller window: two rows of tiles inside the page
+        for i, line in enumerate(["Wiadomości", "Pogoda: Poznań 4°C", "Kursy walut", "Mapy"]):
+            tx = cx + (-1 if i % 2 == 0 else 1) * bw / 4
+            ty = cy - 100 - (i // 2) * 52
+            p.rect(tx, ty, bw / 2 - 40, 42, (44, 44, 48, 255), 12)
+            p.text(tx, ty, line, 14, (220, 220, 225, 255))
+    p.text(cx, y1 + 14, "Szyfrowane · duckduckgo.com", 14, (90, 200, 120, 255))
+    fy, left, right = p.footer_y, -w / 2, w / 2
+    for x, name in ((55, "chevron_left"), (107, "chevron_right"), (159, "refresh")):
+        p.icon_button(left + x, fy, name, "text", 48)
+    p.button(left + 215, fy, "Aa", "text", width=48)
+    p.button(20, fy, "-", "text", width=56)
+    p.button(84, fy, "+", "text", width=56)
+    p.button(right - 80, fy, "Adres", "tonal", width=110)
     return p
 
 def messenger_from_mac():
@@ -275,6 +289,22 @@ if __name__ == "__main__":
     label(render(W, H, 0, -32), "Patrząc w dół, na klawiaturę i gładzik").convert("RGB").save(OUT + "/2_w_dol_biurko.png", optimize=True)
     label(render(W, H, 40, 0), "Obrót głowy w prawo: telefon i okno aplikacji z Maca").convert("RGB").save(OUT + "/3_w_prawo_telefon.png", optimize=True)
     label(render(W, H, -40, 0), "Obrót głowy w lewo: przeglądarka").convert("RGB").save(OUT + "/4_w_lewo_przegladarka.png", optimize=True)
+    # A browser window stretched to 1000 x 640 dp (corner handle), in front of the user
+    base_scene = scene
+    def stretched_scene():
+        items = [(browser(1000, 640), 0, 3, 1.4), (dock(), 0, -27, 1.2)]
+        placed = []
+        for panel, yaw, pitch, d in items:
+            f = direction(yaw, pitch); centre = tuple(c * d for c in f)
+            right = norm(cross((0, 1, 0), f)); up = cross(f, right)
+            hw, hh = dp_m(panel.w, d) / 2, dp_m(panel.h, d) / 2
+            corners = [tuple(centre[i] + sx * right[i] * hw + sy * up[i] * hh for i in range(3))
+                       for sx, sy in ((-1, 1), (1, 1), (1, -1), (-1, -1))]
+            placed.append((d, panel, corners))
+        return sorted(placed, key=lambda t: -t[0])
+    scene = stretched_scene
+    label(render(W, H, 0, -4), "Okno przeglądarki rozciągnięte za uchwyt w rogu (1000 × 640 dp)").convert("RGB").save(OUT + "/6_rozciagniete_okno.png", optimize=True)
+    scene = base_scene
     # What the iPhone's screen shows in the headset: one view per eye (63 mm apart), each seen through a lens
     eye_w, eye_h = 900, 1000
     phone_img = Image.new("RGB", (eye_w * 2, eye_h), (0, 0, 0))
