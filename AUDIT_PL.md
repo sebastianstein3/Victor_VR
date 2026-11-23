@@ -127,9 +127,10 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
 3. **Prawdziwe wideo w telefonie / oknie**: demo Video ma gotowe `VideoLibrary`, `DriveLink`,
    `DriveDownloader` i `VideoPlayer` (pliki z telefonu i linki Google Drive). Zamiast atrap TikTok/Shorts:
    własne klipy pionowe.
-4. **Ostrość dłoni przy pisaniu**: `PassthroughHandFocus` przestawia obraz kamery na odległość dłoni.
-5. **Wizualne potwierdzenie stuknięcia**: podświetlenie klawisza pod palcem (hover) i „wciśnięcie” –
-   dziś tylko dźwięk.
+4. ~~Ostrość dłoni przy pisaniu~~ – **już działa**: `PassthroughHandFocus` jest w scenie Core bazy i
+   działa w każdym demie.
+5. ~~Podświetlenie klawisza pod palcem~~ – **zrobione**: klawisz pod palcem świeci się od 8 cm nad
+   płaszczyzną klawiatury, zanim stuknięcie go wciśnie.
 
 **Średni:**
 6. Suwak odległości/rozmiaru okien (`M3.Slider`), przełącznik układów (`M3.Segments`), dock jako
@@ -138,8 +139,8 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
    input z gładzika/klawiatury jest już kierowany do `RemoteDesktopReceiver`.
 8. WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
 9. Dźwięk przestrzenny okien: `AudioSource` są, ale nic nie gra – podpiąć wideo/pulpit.
-10. Dyktowanie: podgląd tekstu „na żywo” (`PartialRecognized` już jest), wybór języka w docku, komendy
-    głosowe („nowy ekran”, „wyczyść”).
+10. Dyktowanie: ~~podgląd na żywo~~ **zrobione** (przycisk „Głos” pokazuje koniec usłyszanego tekstu);
+    zostały: wybór języka w docku, komendy głosowe („nowy ekran”, „wyczyść”).
 
 **Niski / eksperymenty:**
 11. Gesty: pięść = „chwyć wszystkie okna”, dłoń do siebie = menu na nadgarstku (detektor już to rozpoznaje).

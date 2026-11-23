@@ -16,6 +16,7 @@ namespace CardboardXR.Demos.Workspace
         const float k_KeyHeight = M3.k_ButtonHeight; // the buttons are this tall, so the touch area matches them
         const float k_KeyGap = 6f;
         const float k_DebounceTime = 0.22f;
+        const float k_HoverDistance = 0.08f; // meters from the plane at which the key under the finger lights up
 
         static readonly string[] s_Row1 = { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" };
         static readonly string[] s_Row2 = { "A", "S", "D", "F", "G", "H", "J", "K", "L" };
@@ -36,6 +37,7 @@ namespace CardboardXR.Demos.Workspace
         float m_LastPressTime;
         // The key the fingertip is resting on, so one tap types once (no key repeat while the finger stays in the plane).
         string m_HeldKey;
+        int m_HoverIndex = -1;
         readonly List<KeyHitbox> m_Hitboxes = new();
         readonly List<M3Button> m_KeyButtons = new();
 
@@ -86,6 +88,7 @@ namespace CardboardXR.Demos.Workspace
         {
             m_Hitboxes.Clear();
             m_KeyButtons.Clear();
+            m_HoverIndex = -1;
 
             // Row 1: Q..P + Backspace
             float y = 90f;
@@ -163,6 +166,7 @@ namespace CardboardXR.Demos.Workspace
             if (m_Tracker == null || !m_Tracker.isActiveAndEnabled || !m_Tracker.IsTracking)
             {
                 m_HeldKey = null; // the hand is gone, so it isn't resting on a key any more
+                SetHover(-1);
                 return;
             }
 
@@ -177,24 +181,28 @@ namespace CardboardXR.Demos.Workspace
 
             float zDistanceMeters = Mathf.Abs(localTip.z * canvasScale);
 
-            // The fingertip has to be touching/penetrating within 3.5 cm of the keyboard plane...
-            string touched = null;
-            Action touchedAction = null;
-            if (zDistanceMeters < 0.035f)
+            // The key under the fingertip, if the fingertip is near the keyboard plane
+            int under = -1;
+            if (zDistanceMeters < k_HoverDistance)
             {
                 var point = new Vector2(localTip.x, localTip.y);
-                foreach (var hb in m_Hitboxes)
+                for (int i = 0; i < m_Hitboxes.Count; i++)
                 {
-                    if (hb.rect.Contains(point))
+                    if (m_Hitboxes[i].rect.Contains(point))
                     {
-                        touched = hb.key;
-                        touchedAction = hb.action;
+                        under = i;
                         break;
                     }
                 }
             }
 
-            // ...and it types only when it arrives on a key, not while it rests there.
+            // Highlight it while the finger approaches, so the user sees which key a tap will hit
+            // (passthrough is flat: depth can't be judged by eye, KNOWN_ISSUES.md)
+            SetHover(under);
+
+            // It is pressed when the fingertip is within 3.5 cm of the plane, once on arrival (no
+            // repeat while the finger rests there)
+            string touched = under >= 0 && zDistanceMeters < 0.035f ? m_Hitboxes[under].key : null;
             if (touched == null)
             {
                 m_HeldKey = null;
@@ -205,7 +213,19 @@ namespace CardboardXR.Demos.Workspace
 
             m_HeldKey = touched;
             m_LastPressTime = Time.unscaledTime;
-            touchedAction?.Invoke();
+            m_Hitboxes[under].action?.Invoke();
+        }
+
+        // Lights the key at index (m_KeyButtons and m_Hitboxes are built in the same order), or none (-1).
+        void SetHover(int index)
+        {
+            if (index == m_HoverIndex)
+                return;
+            if (m_HoverIndex >= 0 && m_HoverIndex < m_KeyButtons.Count && m_KeyButtons[m_HoverIndex] != null)
+                m_KeyButtons[m_HoverIndex].Selected = false;
+            if (index >= 0 && index < m_KeyButtons.Count && m_KeyButtons[index] != null)
+                m_KeyButtons[index].Selected = true;
+            m_HoverIndex = index;
         }
 
         void OnDestroy()

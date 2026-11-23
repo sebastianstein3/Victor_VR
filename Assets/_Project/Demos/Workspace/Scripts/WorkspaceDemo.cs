@@ -85,6 +85,7 @@ namespace CardboardXR.Demos.Workspace
             m_Voice = gameObject.AddComponent<VoiceDictation>();
             m_Voice.SpeechRecognized += OnSpeechRecognized;
             m_Voice.Failed += OnVoiceFailed;
+            m_Voice.PartialRecognized += OnVoicePartial;
             m_Voice.RecordingStarted += OnVoiceStarted;
             m_Voice.RecordingEnded += OnVoiceEnded;
 
@@ -146,6 +147,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 m_Voice.SpeechRecognized -= OnSpeechRecognized;
                 m_Voice.Failed -= OnVoiceFailed;
+                m_Voice.PartialRecognized -= OnVoicePartial;
                 m_Voice.RecordingStarted -= OnVoiceStarted;
                 m_Voice.RecordingEnded -= OnVoiceEnded;
                 Destroy(m_Voice);
@@ -338,10 +340,22 @@ namespace CardboardXR.Demos.Workspace
                 m_VoiceBtn.Selected = true;
         }
 
+        // While talking, the Voice button shows the end of what has been heard so far
+        void OnVoicePartial(string text)
+        {
+            if (m_VoiceBtn == null || string.IsNullOrEmpty(text))
+                return;
+            const int max = 12;
+            m_VoiceBtn.Text = text.Length > max ? "…" + text.Substring(text.Length - max) : text;
+        }
+
         void OnVoiceEnded()
         {
             if (m_VoiceBtn != null)
+            {
                 m_VoiceBtn.Selected = false;
+                m_VoiceBtn.Text = "Głos";
+            }
         }
 
         void ToggleVoiceDictation()
@@ -375,7 +389,10 @@ namespace CardboardXR.Demos.Workspace
         void OnVoiceFailed(string message)
         {
             if (m_VoiceBtn != null)
+            {
                 m_VoiceBtn.Selected = false;
+                m_VoiceBtn.Text = "Głos";
+            }
             if (m_ActiveScreen != null)
                 m_ActiveScreen.AppendText($"\n[głos: {message}]\n");
         }
