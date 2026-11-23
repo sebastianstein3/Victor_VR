@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using CardboardXR.Demos.Video;
 using CardboardXR.Interaction;
 using CardboardXR.UI;
 using TMPro;
@@ -373,33 +375,90 @@ namespace CardboardXR.Demos.Workspace
         const float k_CardHeight = 310f;
         public static string ClipFolder => Path.Combine(Application.persistentDataPath, "Klipy");
 
-        readonly List<string> m_VideoFiles = new();
+        // Local files (Url set) and Google Drive links from Klipy/linki.txt (DriveId set, Url once downloaded)
+        readonly List<VideoEntry> m_Clips = new();
+        public const string k_LinksFileName = "linki.txt";
+        bool m_Downloading;
         VideoPlayer m_Player;
         RenderTexture m_VideoTexture;
         RawImage m_VideoImage;
 
-        bool ShowsVideo => m_VideoFiles.Count > 0 && m_Mode == ViewMode.AppPlayer && m_CurrentApp.name != "Messenger" &&
+        bool ShowsVideo => m_Clips.Count > 0 && m_Mode == ViewMode.AppPlayer && m_CurrentApp.name != "Messenger" &&
                            m_CurrentApp.name != "Notatki";
-        int ClipCount => ShowsVideo ? m_VideoFiles.Count : (m_CurrentApp.sampleClips?.Length ?? 0);
+        int ClipCount => ShowsVideo ? m_Clips.Count : (m_CurrentApp.sampleClips?.Length ?? 0);
 
         void FindVideos()
         {
-            m_VideoFiles.Clear();
+            m_Clips.Clear();
             try
             {
                 Directory.CreateDirectory(ClipFolder);
+                var files = new List<string>();
                 foreach (var file in Directory.GetFiles(ClipFolder))
                 {
                     if (Array.IndexOf(k_VideoExtensions, Path.GetExtension(file).ToLowerInvariant()) >= 0)
-                        m_VideoFiles.Add(file);
+                        files.Add(file);
                 }
-                m_VideoFiles.Sort(StringComparer.OrdinalIgnoreCase);
+                files.Sort(StringComparer.OrdinalIgnoreCase);
+                foreach (var file in files)
+                    m_Clips.Add(new VideoEntry { Title = Path.GetFileNameWithoutExtension(file), Url = file });
+                AddDriveLinks(Path.Combine(ClipFolder, k_LinksFileName));
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[SpatialPhone] Nie można odczytać {ClipFolder}: {e.Message}");
             }
-            Debug.Log($"[SpatialPhone] Klipy wideo: {m_VideoFiles.Count} w {ClipFolder}");
+            Debug.Log($"[SpatialPhone] Klipy wideo: {m_Clips.Count} w {ClipFolder}");
+        }
+
+        // Klipy/linki.txt: one Google Drive link per line (shared as "Anyone with the link"), optionally
+        // followed by a name; lines starting with # are skipped. Downloaded once, by the Video demo's
+        // DriveDownloader, into the app's cache.
+        void AddDriveLinks(string listFile)
+        {
+            if (!File.Exists(listFile))
+            {
+                File.WriteAllText(listFile,
+                    "# Linki do filmów z Google Drive (udostępnione: \"Każdy, kto ma link\"), jeden w linii,\n" +
+                    "# opcjonalnie z nazwą po spacji, np.:\n# https://drive.google.com/file/d/ABC123/view Mój klip\n");
+                return;
+            }
+            foreach (var raw in File.ReadAllLines(listFile))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("#"))
+                    continue;
+                int space = line.IndexOf(' ');
+                string link = space > 0 ? line.Substring(0, space) : line;
+                string name = space > 0 ? line.Substring(space + 1).Trim() : null;
+                if (!DriveLink.TryGetFileId(link, out var id))
+                    continue;
+                m_Clips.Add(new VideoEntry
+                {
+                    // DriveDownloader takes the file's own name for titles that start like this
+                    Title = string.IsNullOrEmpty(name) ? "Drive video " + id : name,
+                    DriveId = id,
+                    Url = VideoLibrary.CachedFile(id),
+                });
+            }
+        }
+
+        IEnumerator DownloadThenPlay(VideoEntry entry, int index)
+        {
+            m_Downloading = true;
+            yield return DriveDownloader.Download(entry, progress =>
+            {
+                if (m_StatusText != null && ShowsVideo && m_CurrentClipIndex == index)
+                    m_StatusText.text = $"Pobieranie z Drive {progress * 100f:F0}%";
+            });
+            m_Downloading = false;
+            // Still on this clip? Play it, or say why not
+            if (!ShowsVideo || m_CurrentClipIndex != index)
+                yield break;
+            if (entry.Url != null)
+                PlayVideo(index);
+            else if (m_StatusText != null)
+                m_StatusText.text = "<noparse>" + (entry.Status ?? "Nie pobrano") + "</noparse>";
         }
 
         void PlayVideo(int index)
@@ -421,13 +480,25 @@ namespace CardboardXR.Demos.Workspace
                         m_StatusText.text = "Nie można odtworzyć tego pliku";
                 };
             }
+            var clip = m_Clips[index];
+            if (clip.NeedsDownload)
+            {
+                m_Player.Stop();
+                if (m_VideoImage != null)
+                    m_VideoImage.enabled = false;
+                if (!m_Downloading)
+                    StartCoroutine(DownloadThenPlay(clip, index));
+                else if (m_StatusText != null)
+                    m_StatusText.text = "Czekam na poprzednie pobieranie...";
+                return;
+            }
             m_Player.Stop();
             m_Player.source = VideoSource.Url;
-            m_Player.url = m_VideoFiles[index];
+            m_Player.url = clip.Url;
             m_Player.EnableAudioTrack(0, true);
             m_Player.Prepare();
             if (m_StatusText != null)
-                m_StatusText.text = Path.GetFileNameWithoutExtension(m_VideoFiles[index]);
+                m_StatusText.text = "<noparse>" + clip.Title + "</noparse>";
         }
 
         void OnVideoPrepared(VideoPlayer player)
