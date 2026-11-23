@@ -69,6 +69,7 @@ namespace ProjectBootstrap
             project.AddFrameworkToProject(framework, "WebKit.framework", false);
             project.AddFrameworkToProject(framework, "Metal.framework", false);
             project.AddFrameworkToProject(framework, "EventKit.framework", false);
+            project.AddFrameworkToProject(framework, "PDFKit.framework", false); // PDF reader
             // Live captions' translation (Plugins/iOS/CardboardXRTranslate.swift): Translation exists from
             // iOS 17.4, so it is linked weakly (the plugin checks for iOS 26.4 itself); Swift needs a version
             project.AddFrameworkToProject(framework, "Translation.framework", true);

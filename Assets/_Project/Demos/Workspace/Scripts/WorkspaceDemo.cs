@@ -466,6 +466,8 @@ namespace CardboardXR.Demos.Workspace
             public string app; // with pc: one app's window on the computer
             public bool browser;
             public string url; // with browser: the page
+            public string pdf; // a PDF reader: the file and page
+            public int pdfPage;
             public int slot;
             public float size = 1f;
             public float width;  // the window's stretched size in dp (0: default)
@@ -515,6 +517,8 @@ namespace CardboardXR.Demos.Workspace
                     app = screen.RemoteApp,
                     browser = screen.IsBrowser,
                     url = screen.IsBrowser ? screen.Browser.Url : null,
+                    pdf = screen.GetComponent<PdfView>() != null ? screen.GetComponent<PdfView>().FilePath : null,
+                    pdfPage = screen.GetComponent<PdfView>() != null ? screen.GetComponent<PdfView>().Page : 0,
                     slot = m_ScreenSlots.TryGetValue(screen, out var slot) ? slot : -1,
                     size = screen.Size,
                     width = screen.LayoutSize.x,
@@ -555,7 +559,9 @@ namespace CardboardXR.Demos.Workspace
                 var screen = CreateNewScreen(string.IsNullOrEmpty(item.title) ? "Ekran" : item.title, item.slot);
                 if (screen == null)
                     continue;
-                if (item.browser)
+                if (!string.IsNullOrEmpty(item.pdf) && System.IO.File.Exists(item.pdf))
+                    screen.gameObject.AddComponent<PdfView>().Initialize(screen, item.pdf, item.pdfPage);
+                else if (item.browser)
                     screen.EnableBrowser(string.IsNullOrEmpty(item.url) ? null : item.url);
                 else if (item.pc)
                     screen.EnableRemoteDesktop(null, string.IsNullOrEmpty(item.app) ? null : item.app);
@@ -609,9 +615,30 @@ namespace CardboardXR.Demos.Workspace
                 new("Notatka", () => SpawnWidget("notatka"), "edit"),
                 new("Pogoda", () => SpawnWidget("pogoda")),
                 new("Kalendarz", () => SpawnWidget("kalendarz")),
+                new("Czytnik PDF", OpenPdfPicker),
             };
             choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
+        }
+
+        // ---- PDF reader ----
+        public void OpenPdfPicker()
+        {
+            var screen = CreateNewScreen("PDF");
+            if (screen == null)
+                return;
+            var choices = new List<ChoiceList.Choice>();
+            foreach (var file in PdfView.FindFiles())
+            {
+                string path = file;
+                string name = System.IO.Path.GetFileNameWithoutExtension(file);
+                if (name.Length > 26)
+                    name = name.Substring(0, 25) + "…";
+                choices.Add(new ChoiceList.Choice(name, () => screen.gameObject.AddComponent<PdfView>().Initialize(screen, path)));
+            }
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Wybierz PDF", choices,
+                "Brak plików PDF. Wrzuć je do folderu PDF aplikacji: Finder > iPhone > Pliki > CardboardXR, albo aplikacja Pliki.",
+                closeOnPick: false);
         }
 
         // ---- Widgets ----
@@ -860,6 +887,15 @@ namespace CardboardXR.Demos.Workspace
                 case "tryb kinowy": case "kino": case "cinema":
                     ToggleCinemaMode();
                     break;
+                case "następna strona": case "dalej": case "next page":
+                    m_ActiveScreen?.GetComponent<PdfView>()?.NextPage();
+                    break;
+                case "poprzednia strona": case "previous page":
+                    m_ActiveScreen?.GetComponent<PdfView>()?.PreviousPage();
+                    break;
+                case "pdf": case "czytnik": case "dokumenty":
+                    OpenPdfPicker();
+                    break;
                 case "napisy": case "napisy na żywo": case "captions":
                     ToggleCaptions();
                     break;
@@ -1030,6 +1066,12 @@ namespace CardboardXR.Demos.Workspace
             {
                 SelectPrevScreen();
                 Debug.Log("[Workspace] Gest: SwipeLeft -> Poprzedni ekran");
+            }
+            else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
+                     m_ActiveScreen != null && m_ActiveScreen.GetComponent<PdfView>() != null)
+            {
+                var pdf = m_ActiveScreen.GetComponent<PdfView>();
+                if (gesture == DynamicGesture.SwipeUp) pdf.NextPage(); else pdf.PreviousPage();
             }
             else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
                      m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
