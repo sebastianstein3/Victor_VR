@@ -69,6 +69,11 @@ namespace ProjectBootstrap
             project.AddFrameworkToProject(framework, "WebKit.framework", false);
             project.AddFrameworkToProject(framework, "Metal.framework", false);
             project.AddFrameworkToProject(framework, "EventKit.framework", false);
+            // Live captions' translation (Plugins/iOS/CardboardXRTranslate.swift): Translation exists from
+            // iOS 17.4, so it is linked weakly (the plugin checks for iOS 26.4 itself); Swift needs a version
+            project.AddFrameworkToProject(framework, "Translation.framework", true);
+            if (string.IsNullOrEmpty(project.GetBuildPropertyForAnyConfig(framework, "SWIFT_VERSION")))
+                project.SetBuildProperty(framework, "SWIFT_VERSION", "5.0");
             project.WriteToFile(projectPath);
             Debug.Log("[ProjectSetup] Voice dictation: speech usage text added, Speech.framework linked.");
         }

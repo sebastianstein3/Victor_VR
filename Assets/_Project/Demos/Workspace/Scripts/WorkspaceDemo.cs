@@ -58,6 +58,13 @@ namespace CardboardXR.Demos.Workspace
         M3Button m_CinemaBtn;
         M3Button m_LanguageBtn;
         bool m_GroupDrag; // a held fist is carrying all the windows
+        LiveCaptions m_Captions;
+
+        public void ToggleCaptions()
+        {
+            if (m_Captions != null)
+                m_Captions.SetOn(!m_Captions.IsOn);
+        }
         WorkspaceAnchors m_RoomAnchors;
         M3Button m_DeskBtn;
         bool m_PlacingDesk; // "Na blat": the next pinch puts the keyboard on the table being looked at
@@ -101,6 +108,8 @@ namespace CardboardXR.Demos.Workspace
             m_Voice = gameObject.AddComponent<VoiceDictation>();
             m_Voice.SpeechRecognized += OnSpeechRecognized;
             m_Voice.Failed += OnVoiceFailed;
+            m_Captions = gameObject.AddComponent<LiveCaptions>();
+            m_Captions.Initialize(transform, m_Core.Head, m_Voice);
             m_Voice.PartialRecognized += OnVoicePartial;
             m_Voice.RecordingStarted += OnVoiceStarted;
             m_Voice.RecordingEnded += OnVoiceEnded;
@@ -183,6 +192,9 @@ namespace CardboardXR.Demos.Workspace
             // These components sit on this demo's own GameObject: destroy the components, not the object.
             if (m_Cinema != null)
                 Destroy(m_Cinema);
+
+            if (m_Captions != null)
+                Destroy(m_Captions); // before the recognizer it listens to
 
             if (m_Voice != null)
             {
@@ -591,6 +603,7 @@ namespace CardboardXR.Demos.Workspace
                 return;
             var choices = new List<ChoiceList.Choice>
             {
+                new(m_Captions != null && m_Captions.IsOn ? "Wyłącz napisy" : "Napisy na żywo", ToggleCaptions),
                 new("Zegar", () => SpawnWidget("zegar")),
                 new("Minutnik", () => SpawnWidget("minutnik")),
                 new("Notatka", () => SpawnWidget("notatka"), "edit"),
@@ -755,6 +768,8 @@ namespace CardboardXR.Demos.Workspace
         // While talking, the Voice button shows the end of what has been heard so far
         void OnVoicePartial(string text)
         {
+            if (m_Captions != null && m_Captions.IsOn)
+                return;
             if (m_VoiceBtn == null || string.IsNullOrEmpty(text))
                 return;
             const int max = 12;
@@ -783,6 +798,12 @@ namespace CardboardXR.Demos.Workspace
 
         void ToggleVoiceDictation()
         {
+            // The voice button also ends captions
+            if (m_Captions != null && m_Captions.IsOn)
+            {
+                m_Captions.SetOn(false);
+                return;
+            }
             if (m_Voice != null)
                 m_Voice.ToggleRecording();
         }
@@ -791,6 +812,14 @@ namespace CardboardXR.Demos.Workspace
         {
             if (string.IsNullOrWhiteSpace(transcribedText))
                 return;
+            // Captions on: speech is subtitled, not typed or obeyed, except the command to stop them
+            if (m_Captions != null && m_Captions.IsOn)
+            {
+                string spoken = transcribedText.Trim().TrimEnd('.', '!', '?').ToLowerInvariant();
+                if (spoken == "wyłącz napisy" || spoken == "koniec napisów" || spoken == "stop captions")
+                    m_Captions.SetOn(false);
+                return;
+            }
             if (!VoiceDictation.IsMock && TryVoiceCommand(transcribedText))
                 return;
 
@@ -830,6 +859,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "tryb kinowy": case "kino": case "cinema":
                     ToggleCinemaMode();
+                    break;
+                case "napisy": case "napisy na żywo": case "captions":
+                    ToggleCaptions();
                     break;
                 case "więcej": case "menu": case "more":
                     OpenMore();
