@@ -34,31 +34,38 @@ Reszta repozytorium to bazowy projekt [brenpoly/CardboardXR](https://github.com/
 | 18 | Dyktowanie wstawia gotowe zdania niezależnie od tego, co powiesz | Oznaczone `[głos-demo]` | `WorkspaceDemo` |
 | 19 | `DemoCatalog.asset` zapisany z CRLF → diff całego pliku; w repo dodany `.gitattributes` (LF) | Konflikty końców linii między urządzeniami | repo |
 
+## 1b. Druga tura (funkcje i układ)
+
+| Co | Jak działa teraz |
+|---|---|
+| **Gładzik / mysz klikają** | Stuknięcie jednym palcem w gładzik (lub lewy przycisk myszy) klika przycisk pod kursorem na aktywnym oknie (Zamknij, Przypnij, Wyczyść, Chwyć). Stuknięcie dwoma palcami / prawy przycisk = przypnij/odepnij okno. Okno pod kursorem dostaje fokus. Kod: `VirtualScreen.ClickAtCursor / ContextClickAtCursor`. |
+| **Układ okna** | Okno 520×440 dp, wszystkie przyciski mają pełne 56 dp, rzędy (nagłówek / treść / stopka / chwyt) nie nachodzą na siebie; obraz pulpitu PC wypełnia obszar treści. |
+| **Układ telefonu** | Przyciski ≥48–56 dp, siatka aplikacji i sterowanie odtwarzaniem bez nakładania, uchwyt „Przenieś” mieści się w obudowie. |
+| **Dock** | Szerokość przycisków liczona z etykiet (`M3.ButtonWidth`), odstępy 8 dp, panel dopasowany do przycisków; bez ikon, żeby był wąski. |
+| **Chiralność gestów** | Kierunek dłoni liczony przez `PalmGesture.Facing` z bazowego projektu (obraz z kamery + lewa/prawa dłoń, sprawdzone tam na telefonie). Rezerwowo: 3D z poprawnym znakiem dla każdej dłoni. 3 nowe testy jednostkowe (sprawdzone symulacją w Pythonie). |
+| **Prawdziwe dyktowanie (iOS)** | `Plugins/iOS/CardboardXRSpeech.mm`: `SFSpeechRecognizer` + `AVAudioEngine`, język `pl-PL`, mikrofon iPhone'a lub AirPods; wynik trafia do aktywnego okna albo czatu. `Editor/ProjectBootstrap/IosSpeech.cs` dodaje `NSSpeechRecognitionUsageDescription` do Info.plist i dołącza `Speech.framework`. Poza iOS (edytor, Android) zostaje atrapa z oznaczeniem `[głos-demo]`. Błędy (brak zgody, brak internetu) pokazują się w oknie. |
+
+**Czego dyktowanie nie sprawdzono:** kodu Objective-C nie kompilowałem ani nie uruchamiałem (brak Xcode/iPhone'a).
+Przy pierwszym użyciu iOS zapyta o zgodę na mikrofon i rozpoznawanie mowy. W trakcie nagrywania AirPods
+przechodzą na jakość „rozmowy" (tak jest w każdej aplikacji, która nagrywa). Tryb offline: ustaw
+`VoiceDictation.OnDeviceOnly = true` (wymaga pobranego języka dyktowania w iOS).
+
 ## 2. Czego NIE naprawiłem (wymaga Twojej decyzji lub urządzenia)
 
 1. **Brak plików `.meta` dla nowych plików** (`Demos/Workspace/**`, `SpatialGestureDetector.cs`) i brak sceny
    `Workspace.unity`. Otwórz projekt w Unity, wybierz **CardboardXR > Make Missing Demo Scenes**
    i **zacommituj wszystkie wygenerowane `.meta` oraz `Workspace.unity`**. Bez tego na każdym
    urządzeniu Unity wygeneruje nowe GUID-y, a referencje się rozjadą.
-2. **Chiralność gestów dłoni.** `GetPalmNormal` ma znak zależny od tego, która to dłoń: z mojej analizy
-   (przestrzeń lewoskrętna Unity) dla jednej z dłoni `OpenPalmForward` i `OpenPalmUser` są zamienione.
-   Naprawa to odwrócenie normalnej wg `HandTracker.HandednessScore` (>0.5 = prawa), ale nie wiem,
-   czy etykieta modelu nie jest odwrócona przy tylnej kamerze – **sprawdź na iPhonie**.
-3. **Trackpad**: zdarzenia `LeftClicked` / `RightClicked` nigdzie nie są podpięte (kursor jest tylko
-   wizualny, nie ma co klikać). To makieta.
+2. ~~Chiralność gestów~~ – naprawione w drugiej turze (1b); **sprawdź na iPhonie** obie dłonie.
+3. ~~Trackpad nic nie klikał~~ – naprawione (1b). Klika tylko przyciski okien; w oknach nie ma jeszcze
+   innych elementów do klikania.
 4. **Funkcje-makiety** (HANDOVER sam to przyznaje w roadmapie, ale opis w części 3 brzmi jak gotowe):
    Messenger / TikTok / Shorts / Reels / Twitch / Notatki to **teksty-atrapy**, nie prawdziwe aplikacje;
-   Zdalny pulpit rysuje sztuczną teksturę; Dyktowanie to losowe zdanie. Prawdziwe wersje wymagają
-   WebView, WebRTC/Moonlight i `SFSpeechRecognizer`.
+   Zdalny pulpit rysuje sztuczną teksturę. Prawdziwe wersje wymagają WebView i WebRTC/Moonlight.
+   (Dyktowanie jest już prawdziwe na iOS, patrz 1b.)
 5. **Dokładność pisania w powietrzu**: próg 3,5 cm od płaszczyzny klawiatury przy głębi szacowanej
    z jednej kamery (błąd rzędu centymetrów) – w praktyce będzie nierówno. Bluetooth-klawiatura działa lepiej.
-6. **Układ okien (VirtualScreen)**: stopka (y=-116, przycisk 56 dp) i pasek chwytania (y=-156) nachodzą
-   na siebie o ok. 16 dp. Trzeba zobaczyć w goglach i ewentualnie przesunąć.
-7. **Wąskie przyciski klawiatury**: `M3.Button` dla szerokości 48 dp daje pole etykiety ok. 4 dp szerokości
-   (padding 2×24 dp). Pojedyncze litery pewnie się wyświetlą (TMP nie łamie jednego znaku), ale sprawdź
-   na urządzeniu; w razie potrzeby użyć własnych przycisków bez paddingu.
-8. **Dock** ma 680 dp szerokości, a 6 przycisków po 90–110 dp stoi co 95–115 dp: bardzo ciasno (przerwy 0–5 dp,
-   zalecane przez bazę: 8 dp).
+6. ~~Układ okien, telefonu i docka~~ – przeprojektowane w drugiej turze (1b); **oceń w goglach** czy rozmiary pasują.
 9. **Profil optyczny Shinecon G10 jest zgadywany**, nie zmierzony: skrypt ma 44 mm / 63 mm / FOV 90° /
    k1=0,34 k2=0,12, a dokumentacja (PLAN, HANDOVER, karta HTML) 42 mm / 62 mm / FOV 95° / k1=0,32 k2=0,22.
    Wartości się nie zgadzają, a HANDOVER nazywa profil „oficjalnym” – nie jest. Pola protobuf w kodzie QR

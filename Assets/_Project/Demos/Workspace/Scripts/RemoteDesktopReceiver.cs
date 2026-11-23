@@ -29,8 +29,8 @@ namespace CardboardXR.Demos.Workspace
             var screenObj = new GameObject("DesktopRawImage", typeof(RectTransform));
             screenObj.transform.SetParent(parentRect, false);
             var rect = (RectTransform)screenObj.transform;
-            rect.anchoredPosition = new Vector2(0f, 10f);
-            rect.sizeDelta = new Vector2(parentRect.sizeDelta.x - 20f, parentRect.sizeDelta.y - 70f);
+            rect.anchoredPosition = VirtualScreen.BodyCenter;
+            rect.sizeDelta = VirtualScreen.BodySize;
 
             m_ScreenDisplay = screenObj.AddComponent<RawImage>();
             // The picture is only a backdrop: it must not take the gaze/pinch from the Close, Pin,
@@ -42,7 +42,7 @@ namespace CardboardXR.Demos.Workspace
 
             // Connection Status Overlay
             m_StatusText = M3.Text("DesktopStatus", parentRect, $"TRYB DEMO: brak strumienia z PC ({m_HostAddress}:{m_Port})",
-                M3Theme.Type.BodyMedium, new Vector2(0f, -(parentRect.sizeDelta.y / 2f) + 40f),
+                M3Theme.Type.BodyMedium, VirtualScreen.BodyCenter + new Vector2(0f, -VirtualScreen.BodySize.y / 2f + 14f),
                 new Vector2(400f, 20f), new Color(1f, 0.75f, 0.3f), TextAlignmentOptions.Center);
 
             // No real stream is implemented yet (see HANDOVER.md, roadmap), so never report "connected".

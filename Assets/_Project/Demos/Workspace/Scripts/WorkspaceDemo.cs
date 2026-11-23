@@ -50,6 +50,7 @@ namespace CardboardXR.Demos.Workspace
             // Voice Dictation
             m_Voice = gameObject.AddComponent<VoiceDictation>();
             m_Voice.SpeechRecognized += OnSpeechRecognized;
+            m_Voice.Failed += OnVoiceFailed;
             m_Voice.RecordingStarted += OnVoiceStarted;
             m_Voice.RecordingEnded += OnVoiceEnded;
 
@@ -105,6 +106,7 @@ namespace CardboardXR.Demos.Workspace
             if (m_Voice != null)
             {
                 m_Voice.SpeechRecognized -= OnSpeechRecognized;
+                m_Voice.Failed -= OnVoiceFailed;
                 m_Voice.RecordingStarted -= OnVoiceStarted;
                 m_Voice.RecordingEnded -= OnVoiceEnded;
                 Destroy(m_Voice);
@@ -113,27 +115,37 @@ namespace CardboardXR.Demos.Workspace
 
         void BuildControlDock()
         {
-            // Floating control dock below eye level (pitch -22 deg, distance 1.2m)
-            m_ControlDock = WorldUi.Panel("Workspace Dock", transform, new Vector2(680f, 64f), 1.2f,
-                M3Theme.SurfaceContainerHighest, 32f);
+            // Floating control dock below eye level (pitch -22 deg, distance 1.2m). The buttons are as
+            // wide as their labels need (no icons, to keep the dock narrow), 8 dp apart as the Material
+            // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
+            const float gap = M3Theme.k_TargetGap;
+            const float margin = 16f;
+            string[] labels = { "Monitor", "Pulpit PC", "Telefon", "Głos", "Kino", "Reset biurka" };
+            var widths = new float[labels.Length];
+            float total = gap * (labels.Length - 1);
+            for (int i = 0; i < labels.Length; i++)
+            {
+                widths[i] = M3.ButtonWidth(labels[i], null);
+                total += widths[i];
+            }
 
-            M3.Button("NewScreenBtn", m_ControlDock, "+ Monitor", M3Button.Variant.Filled,
-                new Vector2(-260f, 0f), () => CreateNewScreen($"Ekran {m_Screens.Count + 1}"), "view_in_ar", 100f);
+            m_ControlDock = WorldUi.Panel("Workspace Dock", transform, new Vector2(total + margin * 2f, M3.k_ButtonHeight + margin * 2f),
+                1.2f, M3Theme.SurfaceContainerHighest, 36f);
 
-            M3.Button("PcScreenBtn", m_ControlDock, "+ Pulpit PC", M3Button.Variant.Tonal,
-                new Vector2(-155f, 0f), CreatePcDesktopScreen, "aspect_ratio", 110f);
+            float x = -total / 2f;
+            M3Button Add(int i, string name, M3Button.Variant variant, UnityEngine.Events.UnityAction onClick)
+            {
+                var button = M3.Button(name, m_ControlDock, labels[i], variant, new Vector2(x + widths[i] / 2f, 0f), onClick, null, widths[i]);
+                x += widths[i] + gap;
+                return button;
+            }
 
-            M3.Button("NewPhoneBtn", m_ControlDock, "Smartfon", M3Button.Variant.Filled,
-                new Vector2(-40f, 0f), SpawnPhoneScreen, "smartphone", 110f);
-
-            m_VoiceBtn = M3.Button("VoiceBtn", m_ControlDock, "G\u0142os", M3Button.Variant.Outlined,
-                new Vector2(65f, 0f), ToggleVoiceDictation, "edit", 90f);
-
-            m_CinemaBtn = M3.Button("CinemaBtn", m_ControlDock, "Kino", M3Button.Variant.Outlined,
-                new Vector2(160f, 0f), ToggleCinemaMode, "movie", 90f);
-
-            M3.Button("ResetDeskBtn", m_ControlDock, "Reset Biurka", M3Button.Variant.Tonal,
-                new Vector2(265f, 0f), ResetDeskPosition, "touch_app", 110f);
+            Add(0, "NewScreenBtn", M3Button.Variant.Filled, () => CreateNewScreen($"Ekran {m_Screens.Count + 1}"));
+            Add(1, "PcScreenBtn", M3Button.Variant.Tonal, CreatePcDesktopScreen);
+            Add(2, "NewPhoneBtn", M3Button.Variant.Filled, SpawnPhoneScreen);
+            m_VoiceBtn = Add(3, "VoiceBtn", M3Button.Variant.Outlined, ToggleVoiceDictation);
+            m_CinemaBtn = Add(4, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
+            Add(5, "ResetDeskBtn", M3Button.Variant.Tonal, ResetDeskPosition);
 
             WorldUi.PlaceInFront(m_ControlDock, m_Core.Head, 1.2f, -22f, 0f);
         }
@@ -153,6 +165,10 @@ namespace CardboardXR.Demos.Workspace
             m_Keyboard.BackspacePressed += OnBackspacePressed;
             m_Keyboard.EnterPressed += OnEnterPressed;
             m_Keyboard.ClearPressed += OnClearPressed;
+
+            // The trackpad's taps click what is under the active screen's cursor
+            m_Trackpad.LeftClicked += () => { if (m_ActiveScreen != null) m_ActiveScreen.ClickAtCursor(); };
+            m_Trackpad.RightClicked += () => { if (m_ActiveScreen != null) m_ActiveScreen.ContextClickAtCursor(); };
         }
 
         void ResetDeskPosition()
@@ -299,6 +315,13 @@ namespace CardboardXR.Demos.Workspace
 
         void OnSpeechRecognized(string transcribedText)
         {
+            if (string.IsNullOrWhiteSpace(transcribedText))
+                return;
+
+            // Outside iOS nothing is recognized (a canned sentence comes back), so say so in the text.
+            if (VoiceDictation.IsMock)
+                transcribedText = "[głos-demo] " + transcribedText;
+
             if (m_PhoneScreen != null && m_PhoneScreen.IsChatFocused)
             {
                 foreach (char c in transcribedText)
@@ -306,8 +329,18 @@ namespace CardboardXR.Demos.Workspace
             }
             else if (m_ActiveScreen != null)
             {
-                m_ActiveScreen.AppendText($"\n[głos-demo] {transcribedText}");
+                string text = m_ActiveScreen.Text;
+                bool atLineStart = string.IsNullOrEmpty(text) || text.EndsWith("\n");
+                m_ActiveScreen.AppendText((atLineStart ? "" : " ") + transcribedText);
             }
+        }
+
+        void OnVoiceFailed(string message)
+        {
+            if (m_VoiceBtn != null)
+                m_VoiceBtn.Selected = false;
+            if (m_ActiveScreen != null)
+                m_ActiveScreen.AppendText($"\n[głos: {message}]\n");
         }
 
         void ToggleCinemaMode()
@@ -434,6 +467,10 @@ namespace CardboardXR.Demos.Workspace
                 Vector2 delta = mouse.delta.ReadValue();
                 if (delta.sqrMagnitude > 0.01f)
                     m_ActiveScreen.MoveCursorDelta(delta * 0.8f);
+                if (mouse.leftButton.wasPressedThisFrame)
+                    m_ActiveScreen.ClickAtCursor();
+                if (mouse.rightButton.wasPressedThisFrame)
+                    m_ActiveScreen.ContextClickAtCursor();
             }
         }
 

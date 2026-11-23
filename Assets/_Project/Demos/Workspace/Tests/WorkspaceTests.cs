@@ -148,6 +148,70 @@ namespace CardboardXR.Demos.Workspace.Tests
             Assert.IsTrue(conversation[2].Contains("Piszę z wirtualnej klawiatury!"));
         }
 
+        // ---- Palm direction: it must not depend on which hand it is ----
+
+        [Test]
+        public void PalmFacingFromImageHasOppositeSignsForRightAndLeftHands()
+        {
+            // Image pixels, x right and y down: a right hand held up with its palm to the camera has the
+            // index knuckle to the right of the pinky knuckle.
+            var wrist = new Vector2(100f, 200f);
+            var index = new Vector2(130f, 120f);
+            var pinky = new Vector2(70f, 130f);
+
+            Assert.Greater(PalmGesture.Facing(wrist, index, pinky, true), 0.5f);
+            Assert.Less(PalmGesture.Facing(wrist, index, pinky, false), -0.5f);
+        }
+
+        [Test]
+        public void OpenPalmIsReadFromTheCameraFacingValue()
+        {
+            var joints = CreateOpenHand(false);
+            Assert.AreEqual(HandPose.OpenPalmUser,
+                SpatialGestureDetector.EvaluatePose(joints, Vector3.forward, 0.1f, true, 0.9f));
+            Assert.AreEqual(HandPose.OpenPalmForward,
+                SpatialGestureDetector.EvaluatePose(joints, Vector3.forward, 0.1f, true, -0.9f));
+        }
+
+        [Test]
+        public void OpenPalmFrom3DJointsIsTheSameForBothHands()
+        {
+            // The user looks along +Z; the palm is toward the user. A right hand has its index knuckle
+            // to the user's right of the pinky knuckle, a left hand to the left.
+            var right = CreateOpenHand(false);
+            var left = CreateOpenHand(true);
+
+            Assert.AreEqual(HandPose.OpenPalmUser, SpatialGestureDetector.EvaluatePose(right, Vector3.forward, 0.1f, true));
+            Assert.AreEqual(HandPose.OpenPalmUser, SpatialGestureDetector.EvaluatePose(left, Vector3.forward, 0.1f, false));
+
+            // Turned around (the user looks along -Z at the same hands): the palm faces away.
+            Assert.AreEqual(HandPose.OpenPalmForward, SpatialGestureDetector.EvaluatePose(right, Vector3.back, 0.1f, true));
+            Assert.AreEqual(HandPose.OpenPalmForward, SpatialGestureDetector.EvaluatePose(left, Vector3.back, 0.1f, false));
+        }
+
+        // A flat open hand, fingers up (+Y), palm toward a user looking along +Z; mirrored for a left hand.
+        static Vector3[] CreateOpenHand(bool leftHand)
+        {
+            float m = leftHand ? -1f : 1f;
+            var joints = CreateMockJoints();
+            joints[0] = Vector3.zero;
+            joints[2] = new Vector3(0.03f * m, 0.02f, 0f);
+            joints[4] = new Vector3(0.07f * m, 0.06f, 0f);
+
+            // Index, middle, ring, pinky: knuckle, middle joint and tip, each straight up from its knuckle
+            float[] x = { 0.02f, 0.005f, -0.012f, -0.03f };
+            float[] y = { 0.09f, 0.09f, 0.085f, 0.07f };
+            for (int k = 0; k < 4; k++)
+            {
+                int mcp = 5 + 4 * k;
+                joints[mcp] = new Vector3(x[k] * m, y[k], 0f);
+                joints[mcp + 1] = new Vector3(x[k] * m, y[k] + 0.03f, 0f);
+                joints[mcp + 2] = new Vector3(x[k] * m, y[k] + 0.055f, 0f);
+                joints[mcp + 3] = new Vector3(x[k] * m, y[k] + 0.08f, 0f);
+            }
+            return joints;
+        }
+
         static Vector3[] CreateMockJoints()
         {
             var joints = new Vector3[HandGeometry.JointCount];

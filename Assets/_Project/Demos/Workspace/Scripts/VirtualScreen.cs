@@ -11,8 +11,7 @@ namespace CardboardXR.Demos.Workspace
     public class VirtualScreen : MonoBehaviour
     {
         const float k_DefaultWidth = 520f;
-        const float k_DefaultHeight = 360f;
-        const float k_GrabBarHeight = 38f;
+        const float k_DefaultHeight = 440f;
 
         RectTransform m_CanvasRect;
         TextMeshProUGUI m_TitleText;
@@ -101,45 +100,101 @@ namespace CardboardXR.Demos.Workspace
             receiver.Initialize(m_CanvasRect, host);
         }
 
+        // Layout in dp, from the top of a 520 x 440 panel down. Every button is a full 56 dp target
+        // (M3.k_ButtonHeight), and the rows are spaced so that none overlaps another:
+        //   header row   y 160..216   title, pin, close
+        //   divider      y 148
+        //   body         y -80..140   text (or the remote desktop picture)
+        //   footer row   y -136..-80  character count, Clear
+        //   grab bar     y -204..-148 drag handle
+        const float k_HeaderY = 188f;
+        const float k_BodyY = 30f;
+        const float k_BodyHeight = 220f;
+        const float k_FooterY = -108f;
+        const float k_GrabY = -176f;
+
         void BuildInterface(string title)
         {
             // 1. Header Bar (Top)
-            float topY = (k_DefaultHeight / 2f) - 28f;
             m_TitleText = M3.Text("Title", m_CanvasRect, title, M3Theme.Type.TitleMedium,
-                new Vector2(-90f, topY), new Vector2(280f, 36f), M3Theme.OnSurface, TextAlignmentOptions.Left);
+                new Vector2(-110f, k_HeaderY), new Vector2(260f, 40f), M3Theme.OnSurface, TextAlignmentOptions.Left);
 
             // Pin Button
             m_PinButton = M3.IconButton("PinBtn", m_CanvasRect, "check", M3Button.Variant.Outlined,
-                new Vector2(180f, topY), TogglePin, 36f);
+                new Vector2(162f, k_HeaderY), TogglePin, M3.k_ButtonHeight);
 
             // Close Button
             M3.IconButton("CloseBtn", m_CanvasRect, "close", M3Button.Variant.Text,
-                new Vector2(226f, topY), CloseScreen, 36f);
+                new Vector2(226f, k_HeaderY), CloseScreen, M3.k_ButtonHeight);
 
             // Divider line
-            M3.Surface("HeaderDivider", m_CanvasRect, new Vector2(0f, topY - 22f),
+            M3.Surface("HeaderDivider", m_CanvasRect, new Vector2(0f, 148f),
                 new Vector2(k_DefaultWidth - 40f, 2f), M3Theme.OutlineVariant, 0f);
 
             // 2. Document Text Area (Center)
             m_BodyText = M3.Text("Content", m_CanvasRect, m_Content, M3Theme.Type.BodyLarge,
-                new Vector2(0f, 10f), new Vector2(k_DefaultWidth - 60f, 200f), M3Theme.OnSurface, TextAlignmentOptions.TopLeft);
+                new Vector2(0f, k_BodyY), new Vector2(k_DefaultWidth - 60f, k_BodyHeight), M3Theme.OnSurface, TextAlignmentOptions.TopLeft);
             // Page overflow, so a long text shows its last page (where the cursor is) instead of
             // cutting the newest characters off with an ellipsis.
             m_BodyText.overflowMode = TextOverflowModes.Page;
 
-            // 3. Footer Stats (Above Grab Bar)
-            float footerY = -(k_DefaultHeight / 2f) + 64f;
+            // 3. Footer Stats and Clear, between the body and the grab bar
             m_FooterText = M3.Text("Footer", m_CanvasRect, "Znaki: 0 | Słowa: 0", M3Theme.Type.BodyMedium,
-                new Vector2(-120f, footerY), new Vector2(220f, 24f), M3Theme.OnSurfaceVariant, TextAlignmentOptions.Left);
+                new Vector2(-130f, k_FooterY), new Vector2(200f, 24f), M3Theme.OnSurfaceVariant, TextAlignmentOptions.Left);
 
-            // Quick Clear Button
             M3.Button("ClearBtn", m_CanvasRect, "Wyczyść", M3Button.Variant.Text,
-                new Vector2(180f, footerY), Clear, null, 80f);
+                new Vector2(190f, k_FooterY), Clear, null, 110f);
 
             // 4. Bottom Grab Bar (Grab to drag anywhere in the room)
-            float grabY = -(k_DefaultHeight / 2f) + 24f;
             m_GrabButton = M3.Button("GrabBar", m_CanvasRect, "Chwyć, aby przenieść ekran", M3Button.Variant.Tonal,
-                new Vector2(0f, grabY), OnGrabClicked, "open_with", k_DefaultWidth - 60f);
+                new Vector2(0f, k_GrabY), OnGrabClicked, "open_with", k_DefaultWidth - 60f);
+        }
+
+        // The area the remote desktop picture fills, the same as the text area.
+        public static Vector2 BodyCenter => new(0f, k_BodyY);
+        public static Vector2 BodySize => new(k_DefaultWidth - 60f, k_BodyHeight);
+
+        // ---- Pointer: the cursor (moved by the desk trackpad or a mouse) can click this window's buttons ----
+
+        // Clicks the button under the cursor, if any; true when one was clicked. Also focuses the window.
+        public bool ClickAtCursor()
+        {
+            Focused?.Invoke(this);
+            foreach (var button in GetComponentsInChildren<M3Button>(false))
+            {
+                if (!button.isActiveAndEnabled || !button.Interactable)
+                    continue;
+                if (!CursorIsOver((RectTransform)button.transform))
+                    continue;
+                button.Button.onClick.Invoke();
+                return true;
+            }
+            return false;
+        }
+
+        // The secondary click (right mouse button, two-finger tap): pins or unpins the window, so it
+        // can be left in place and not carried along by the next drag.
+        public void ContextClickAtCursor()
+        {
+            Focused?.Invoke(this);
+            TogglePin();
+        }
+
+        bool CursorIsOver(RectTransform rect)
+        {
+            // The rect's corners in the window's own dp space, the space the cursor moves in.
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+            for (int i = 0; i < 4; i++)
+            {
+                var local = m_CanvasRect.InverseTransformPoint(corners[i]);
+                minX = Mathf.Min(minX, local.x);
+                maxX = Mathf.Max(maxX, local.x);
+                minY = Mathf.Min(minY, local.y);
+                maxY = Mathf.Max(maxY, local.y);
+            }
+            return m_CursorPos.x >= minX && m_CursorPos.x <= maxX && m_CursorPos.y >= minY && m_CursorPos.y <= maxY;
         }
 
         public void AppendChar(char c)

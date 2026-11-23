@@ -170,7 +170,7 @@ namespace CardboardXR.Demos.Workspace
         void BuildPhoneFrame()
         {
             // Top Dynamic Island & Status Bar
-            float topY = (k_PhoneHeight / 2f) - 20f;
+            float topY = (k_PhoneHeight / 2f) - 22f; // 258
             string timeStr = DateTime.Now.ToString("HH:mm");
             M3.Text("Clock", m_CanvasRect, timeStr, M3Theme.Type.LabelLarge,
                 new Vector2(-80f, topY), new Vector2(80f, 24f), M3Theme.OnSurface, TextAlignmentOptions.Left);
@@ -181,10 +181,10 @@ namespace CardboardXR.Demos.Workspace
 
             // Close button (top right)
             M3.IconButton("ClosePhone", m_CanvasRect, "close", M3Button.Variant.Text,
-                new Vector2(105f, topY), () => { Closed?.Invoke(this); Destroy(gameObject); }, 28f);
+                new Vector2(100f, topY - 10f), () => { Closed?.Invoke(this); Destroy(gameObject); }, 48f);
 
             // Bottom Grab Handle Bar
-            float grabY = -(k_PhoneHeight / 2f) + 20f;
+            float grabY = -(k_PhoneHeight / 2f) + 32f; // -248: the 56 dp button then ends 4 dp inside the panel
             m_GrabBtn = M3.Button("PhoneGrab", m_CanvasRect, "Przenieś smartfon", M3Button.Variant.Text,
                 new Vector2(0f, grabY), OnGrabClick, "open_with", k_PhoneWidth - 40f);
 
@@ -250,14 +250,14 @@ namespace CardboardXR.Demos.Workspace
 
             // Greeting header
             M3.Text("HomeHeader", m_HomeContainer, "Twoje Aplikacje", M3Theme.Type.TitleMedium,
-                new Vector2(0f, 175f), new Vector2(240f, 30f), M3Theme.OnSurface, TextAlignmentOptions.Center);
+                new Vector2(0f, 190f), new Vector2(240f, 30f), M3Theme.OnSurface, TextAlignmentOptions.Center);
             M3.Text("HomeSub", m_HomeContainer, "Wybierz aplikację do podglądu", M3Theme.Type.BodyMedium,
-                new Vector2(0f, 152f), new Vector2(240f, 18f), M3Theme.OnSurfaceVariant, TextAlignmentOptions.Center);
+                new Vector2(0f, 166f), new Vector2(240f, 20f), M3Theme.OnSurfaceVariant, TextAlignmentOptions.Center);
 
             // Grid of 6 App Icons (2 columns x 3 rows)
-            float startY = 88f;
-            float spacingY = 88f;
-            float posX = 60f;
+            float startY = 92f;
+            float spacingY = 100f;
+            float posX = 64f;
 
             for (int i = 0; i < s_Apps.Length; i++)
             {
@@ -267,11 +267,11 @@ namespace CardboardXR.Demos.Workspace
 
                 // App Icon Squircle Button
                 M3.IconButton($"AppBtn_{app.name}", m_HomeContainer, app.icon, M3Button.Variant.Filled,
-                    new Vector2(colX, rowY), () => LaunchApp(app), 50f);
+                    new Vector2(colX, rowY), () => LaunchApp(app), M3.k_ButtonHeight);
 
                 // App Label
                 M3.Text($"Label_{app.name}", m_HomeContainer, app.name, M3Theme.Type.LabelLarge,
-                    new Vector2(colX, rowY - 36f), new Vector2(100f, 20f), M3Theme.OnSurface, TextAlignmentOptions.Center);
+                    new Vector2(colX, rowY - 40f), new Vector2(110f, 20f), M3Theme.OnSurface, TextAlignmentOptions.Center);
             }
         }
 
@@ -296,15 +296,15 @@ namespace CardboardXR.Demos.Workspace
         void BuildAppPlayerView()
         {
             // Top Nav Bar
-            float headerY = 185f;
+            float headerY = 196f;
             M3.IconButton("BackBtn", m_PlayerContainer, "chevron_left", M3Button.Variant.Text,
-                new Vector2(-105f, headerY), ShowHomeScreen, 32f);
+                new Vector2(-96f, headerY), ShowHomeScreen, 48f);
 
             m_PlayerTitleText = M3.Text("AppTitle", m_PlayerContainer, m_CurrentApp.name, M3Theme.Type.TitleMedium,
-                new Vector2(0f, headerY + 4f), new Vector2(150f, 28f), m_CurrentApp.color, TextAlignmentOptions.Center);
+                new Vector2(8f, headerY + 6f), new Vector2(130f, 28f), m_CurrentApp.color, TextAlignmentOptions.Center);
 
             m_PlayerUrlText = M3.Text("AppUrl", m_PlayerContainer, m_CurrentApp.url, M3Theme.Type.BodyMedium,
-                new Vector2(0f, headerY - 18f), new Vector2(220f, 18f), M3Theme.OnSurfaceVariant, TextAlignmentOptions.Center);
+                new Vector2(8f, headerY - 16f), new Vector2(150f, 20f), M3Theme.OnSurfaceVariant, TextAlignmentOptions.Center);
 
             // Simulated Video Display Card (Aspect 9:14 inside screen)
             M3.Surface("VideoScreenBg", m_PlayerContainer, new Vector2(0f, 10f),
@@ -318,24 +318,22 @@ namespace CardboardXR.Demos.Workspace
 
             // Overlay Video Info
             m_StatusText = M3.Text("StatusText", m_PlayerContainer, "Gest: Swipe Up \u2191 nast\u0119pny film", M3Theme.Type.BodyMedium,
-                new Vector2(0f, -80f), new Vector2(220f, 30f), m_CurrentApp.color, TextAlignmentOptions.Center);
+                new Vector2(0f, -60f), new Vector2(220f, 30f), m_CurrentApp.color, TextAlignmentOptions.Center);
 
             // Playback controls row
             float ctrlY = -115f;
             M3.IconButton("PrevClipBtn", m_PlayerContainer, "chevron_left", M3Button.Variant.Tonal,
-                new Vector2(-70f, ctrlY), PrevClip, 36f);
+                new Vector2(-76f, ctrlY), PrevClip, 48f);
 
             m_PlayPauseBtn = M3.IconButton("PlayPauseBtn", m_PlayerContainer, "pause", M3Button.Variant.Filled,
-                new Vector2(0f, ctrlY), TogglePlayPause, 44f);
+                new Vector2(0f, ctrlY), TogglePlayPause, M3.k_ButtonHeight);
 
             M3.IconButton("NextClipBtn", m_PlayerContainer, "skip_next", M3Button.Variant.Tonal,
-                new Vector2(70f, ctrlY), NextClip, 36f);
+                new Vector2(76f, ctrlY), NextClip, 48f);
 
-            // Bottom Home Indicator Bar (Clicking it returns to Home)
-            M3.Surface("HomeBar", m_PlayerContainer, new Vector2(0f, -170f), new Vector2(100f, 6f),
-                M3Theme.Outline, 3f);
+            // Back to the app list (its own row, below the controls and above the grab handle)
             M3.Button("HomeBarBtn", m_PlayerContainer, "Pulpit aplikacji", M3Button.Variant.Text,
-                new Vector2(0f, -170f), ShowHomeScreen, "home", 140f);
+                new Vector2(0f, -180f), ShowHomeScreen, "home", 170f);
 
             UpdateClipDisplay();
         }

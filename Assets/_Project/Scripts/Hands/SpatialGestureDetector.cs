@@ -75,8 +75,20 @@ namespace CardboardXR.Hands
             var joints = m_Tracker.Joints;
             var headForward = m_Head != null ? m_Head.forward : Vector3.forward;
 
+            // Which way the palm faces, from the camera image and which hand it is (the base project's
+            // PalmGesture, tested on a phone). The phone's camera sees what the eyes see, so a palm
+            // toward the camera is a palm toward the user.
+            bool rightHand = m_Tracker.HandednessScore >= 0.5f;
+            float palmFacing = float.NaN;
+            var image = m_Tracker.ImageLandmarks;
+            if (image != null && image.Count >= HandGeometry.JointCount)
+            {
+                palmFacing = PalmGesture.Facing(image[PalmGesture.k_Wrist], image[PalmGesture.k_IndexKnuckle],
+                    image[PalmGesture.k_PinkyKnuckle], rightHand);
+            }
+
             // 1. Recognize Static Pose
-            var detectedPose = EvaluatePose(joints, headForward, m_Tracker.PinchDistance);
+            var detectedPose = EvaluatePose(joints, headForward, m_Tracker.PinchDistance, rightHand, palmFacing);
             if (detectedPose != m_CurrentPose)
             {
                 m_CurrentPose = detectedPose;
@@ -137,7 +149,10 @@ namespace CardboardXR.Hands
             }
         }
 
-        public static HandPose EvaluatePose(Vector3[] joints, Vector3 headForward, float pinchDist = 0.05f)
+        // palmFacing is PalmGesture.Facing (1: the palm squarely toward the user, -1: its back); when it
+        // is NaN the 3D joints decide, using which hand it is (rightHand).
+        public static HandPose EvaluatePose(Vector3[] joints, Vector3 headForward, float pinchDist = 0.05f,
+            bool rightHand = true, float palmFacing = float.NaN)
         {
             if (joints == null || joints.Length < HandGeometry.JointCount)
                 return HandPose.None;
@@ -171,13 +186,13 @@ namespace CardboardXR.Hands
             // 4. Open Palm: All 5 fingers extended
             if (indexExt && middleExt && ringExt && pinkyExt)
             {
-                Vector3 palmNormal = GetPalmNormal(joints);
-                float alignment = Vector3.Dot(palmNormal, headForward);
+                // Positive: the palm faces the user; negative: it faces away (the "stop" gesture).
+                float toUser = float.IsNaN(palmFacing) ? PalmFacingFrom3D(joints, headForward, rightHand) : palmFacing;
 
-                if (alignment > 0.35f)
-                    return HandPose.OpenPalmForward;
-                if (alignment < -0.35f)
+                if (toUser > 0.35f)
                     return HandPose.OpenPalmUser;
+                if (toUser < -0.35f)
+                    return HandPose.OpenPalmForward;
             }
 
             return HandPose.None;
@@ -190,10 +205,17 @@ namespace CardboardXR.Hands
             return tipToWrist > pipToWrist * 1.15f;
         }
 
-        // NOTE: the sign of this cross product depends on handedness (it points out of the palm for a
-        // left hand and out of the back of the hand for a right hand, in Unity's left-handed space), so
-        // OpenPalmForward / OpenPalmUser are swapped for one of the two hands. Check on a device which
-        // one and, if needed, flip it with HandTracker.HandednessScore (see AUDIT_PL.md).
+        // GetPalmNormal's cross product points out of the BACK of a right hand and out of the palm of a
+        // left hand (in Unity's left-handed space: with the palm toward the user, the right hand's index
+        // knuckle is to the right of its pinky knuckle, which makes the product point away from the
+        // user). So for a right hand the palm faces the user when the product points along the user's
+        // view, and for a left hand when it points against it.
+        public static float PalmFacingFrom3D(Vector3[] joints, Vector3 headForward, bool rightHand)
+        {
+            float along = Vector3.Dot(GetPalmNormal(joints), headForward);
+            return rightHand ? along : -along;
+        }
+
         public static Vector3 GetPalmNormal(Vector3[] joints)
         {
             Vector3 wrist = joints[0];
