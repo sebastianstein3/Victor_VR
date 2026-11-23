@@ -195,21 +195,19 @@ namespace CardboardXR.Demos.Workspace
         }
 
         // The area the remote desktop picture fills, the same as the text area.
-        // Size steps. Kept between 0.75x and 1.25x: the layout leaves 5 degrees between 41-degree windows,
-        // so a much bigger window would cover its neighbour (and the nearer panel takes the gaze).
-        const float k_SizeStep = 1.12f;
-        const float k_MinSize = 0.75f;
-        const float k_MaxSize = 1.25f;
+        // Window size, 0.6x to 2x of the 520 x 440 dp window (41 x 35 degrees -> up to 82 x 70). Above
+        // ~1.1x a window reaches into the neighbouring slot (windows are 46 degrees apart): the user's
+        // choice; drag it aside or close the neighbour, and "Wyśrodkuj" puts the layout back.
+        const float k_SizeStep = 1.15f;
+        const float k_MinSize = 0.6f;
+        const float k_MaxSize = 2f;
+
+        public void Grow() => Resize(k_SizeStep);
+        public void Shrink() => Resize(1f / k_SizeStep);
         float m_Size = 1f;
 
         void Resize(float factor)
         {
-            // In a browser, - / + zoom the page's text instead (more useful than a bigger window)
-            if (m_Browser != null)
-            {
-                m_Browser.ZoomBy(factor);
-                return;
-            }
             float size = Mathf.Clamp(m_Size * factor, k_MinSize, k_MaxSize);
             if (Mathf.Approximately(size, m_Size))
                 return;

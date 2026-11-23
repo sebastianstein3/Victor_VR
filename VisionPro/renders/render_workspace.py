@@ -112,8 +112,9 @@ def browser():
     p.rect(0, -16, 360, 40, (52, 52, 56, 255), 20, outline=(80, 80, 86, 255))
     p.text(-160, -16, "Szukaj w internecie bez śledzenia", 14, (170, 170, 178, 255), anchor="lm")
     p.text(0, -66, "Szyfrowane · duckduckgo.com", 14, (90, 200, 120, 255))
-    for x, name in ((-200, "chevron_left"), (-144, "chevron_right"), (-88, "refresh")):
+    for x, name in ((-205, "chevron_left"), (-153, "chevron_right"), (-101, "refresh")):
         p.icon_button(x, -108, name, "text", 48)
+    p.button(-45, -108, "Aa", "text", width=48)
     p.button(20, -108, "-", "text", width=56)
     p.button(84, -108, "+", "text", width=56)
     p.button(180, -108, "Adres", "tonal", width=110)

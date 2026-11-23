@@ -16,8 +16,8 @@ namespace CardboardXR.Demos.Workspace
     // Click: look at the page and pinch, or the desk trackpad / a mouse on the window's cursor.
     // Typing (desk keyboard, Bluetooth keyboard, dictation) goes into the page's focused field, or into
     // the address while "Adres" is on (Enter opens it; words without a dot search DuckDuckGo).
-    // Scrolling: swipe up/down with an open hand, or the mouse wheel. The window's - / + zoom the page's
-    // text (like Safari's "Aa"). Under the page: the real host, and whether the page is fully encrypted.
+    // Scrolling: swipe up/down with an open hand, or the mouse wheel. The window's - / + change the
+    // window's size; "Aa" steps the page's text size (like Safari's "Aa"). Under the page: the real host, and whether the page is fully encrypted.
     // A private window keeps no cookies, cache or history after it closes. A page the user isn't
     // looking at refreshes less often (like background tabs), to save battery and heat.
     public class BrowserView : MonoBehaviour
@@ -86,9 +86,11 @@ namespace CardboardXR.Demos.Workspace
 
             // Footer: back, forward, reload (left), the window's own - / + (middle), address (right)
             float y = VirtualScreen.FooterY;
-            M3.IconButton("BrowserBack", canvas, "chevron_left", M3Button.Variant.Text, new Vector2(-200f, y), Back, 48f);
-            M3.IconButton("BrowserForward", canvas, "chevron_right", M3Button.Variant.Text, new Vector2(-144f, y), Forward, 48f);
-            M3.IconButton("BrowserReload", canvas, "refresh", M3Button.Variant.Text, new Vector2(-88f, y), Reload, 48f);
+            // back, forward, reload, Aa (text size) | the window's - / + (size) | Adres
+            M3.IconButton("BrowserBack", canvas, "chevron_left", M3Button.Variant.Text, new Vector2(-205f, y), Back, 48f);
+            M3.IconButton("BrowserForward", canvas, "chevron_right", M3Button.Variant.Text, new Vector2(-153f, y), Forward, 48f);
+            M3.IconButton("BrowserReload", canvas, "refresh", M3Button.Variant.Text, new Vector2(-101f, y), Reload, 48f);
+            M3.Button("BrowserTextSize", canvas, "Aa", M3Button.Variant.Text, new Vector2(-45f, y), CycleTextSize, null, 48f);
             m_AddressBtn = M3.Button("BrowserAddress", canvas, "Adres", M3Button.Variant.Tonal, new Vector2(180f, y),
                 ToggleAddressMode, null, 110f);
             WorkspaceSounds.Attach(screen);
@@ -303,7 +305,21 @@ namespace CardboardXR.Demos.Workspace
             }
         }
 
-        // Text zoom (the window's - / +), like Safari's "Aa"
+        // "Aa": 100 -> 125 -> 150 -> 175 -> 200 -> 75 -> 100 %
+        static readonly float[] k_TextSizes = { 1f, 1.25f, 1.5f, 1.75f, 2f, 0.75f };
+
+        void CycleTextSize()
+        {
+            int next = 0;
+            for (int i = 0; i < k_TextSizes.Length; i++)
+            {
+                if (Mathf.Approximately(k_TextSizes[i], m_Zoom))
+                    next = (i + 1) % k_TextSizes.Length;
+            }
+            ZoomBy(k_TextSizes[next] / m_Zoom);
+        }
+
+        // Text zoom, like Safari's "Aa" (also the voice commands "większy/mniejszy tekst")
         public void ZoomBy(float factor)
         {
             m_Zoom = Mathf.Clamp(m_Zoom * factor, 0.5f, 3f);

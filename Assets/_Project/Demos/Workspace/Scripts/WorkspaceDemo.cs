@@ -728,6 +728,22 @@ namespace CardboardXR.Demos.Workspace
                 case "prywatna przeglądarka": case "tryb prywatny": case "private browser":
                     CreateBrowserScreen(null, true);
                     break;
+                case "większe okno": case "powiększ": case "bigger":
+                    if (m_ActiveScreen != null)
+                        m_ActiveScreen.Grow();
+                    break;
+                case "mniejsze okno": case "pomniejsz": case "smaller":
+                    if (m_ActiveScreen != null)
+                        m_ActiveScreen.Shrink();
+                    break;
+                case "większy tekst": case "bigger text":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.ZoomBy(1.25f);
+                    break;
+                case "mniejszy tekst": case "smaller text":
+                    if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
+                        m_ActiveScreen.Browser.ZoomBy(0.8f);
+                    break;
                 case "wstecz": case "back":
                     if (m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
                         m_ActiveScreen.Browser.GoBack();
