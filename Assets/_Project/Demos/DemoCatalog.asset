@@ -84,3 +84,17 @@ MonoBehaviour:
       ScanSurfaces: 0
       KeepPlacedObjects: 0
       HideCorePanel: 1
+  - Id: workspace
+    Title: Spatial Workspace
+    Description: Wirtualne ekrany w przestrzeni i wirtualna klawiatura rzutowana na blat biurka. Pisz stukajac palcem w stol, uzywaj Messenger, TikTok i zarzadzaj oknami w pokoju.
+    Tagline: Wirtualne monitory i klawiatura na Twoim biurku
+    Icon: touch_app
+    Tint: {r: 0.18, g: 0.65, b: 0.92, a: 1}
+    ScenePath: Assets/_Project/Demos/Workspace/Workspace.unity
+    Requirements:
+      SixDof: 2
+      Passthrough: 2
+      Hands: 2
+      ScanSurfaces: 1
+      KeepPlacedObjects: 0
+      HideCorePanel: 0

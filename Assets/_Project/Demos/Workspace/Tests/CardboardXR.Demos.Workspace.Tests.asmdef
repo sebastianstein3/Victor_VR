@@ -1,0 +1,26 @@
+{
+    "name": "CardboardXR.Demos.Workspace.Tests",
+    "rootNamespace": "CardboardXR.Demos.Workspace.Tests",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "CardboardXR.Demos",
+        "CardboardXR.Hands",
+        "CardboardXR.Demos.Workspace"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

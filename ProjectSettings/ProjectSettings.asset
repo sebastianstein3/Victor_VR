@@ -515,7 +515,7 @@ PlayerSettings:
   enableCrashReportAPI: 0
   cameraUsageDescription: CardboardXR uses the camera to follow your head and hands, and to show the room around you.
   locationUsageDescription: 
-  microphoneUsageDescription: 
+  microphoneUsageDescription: CardboardXR uses the microphone for voice dictation in the Spatial Workspace.
   bluetoothUsageDescription: 
   macOSTargetOSVersion: 12.0
   switchNMETAOverride: 
