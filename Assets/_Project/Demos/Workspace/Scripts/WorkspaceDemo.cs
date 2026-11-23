@@ -30,6 +30,7 @@ namespace CardboardXR.Demos.Workspace
         M3Button m_VoiceBtn;
         M3Button m_CinemaBtn;
         bool m_WorkspaceVisible = true;
+        AudioListener m_AddedListener;
 
         // A pose acts only after it has been held for k_PoseHoldSeconds, once per hold: the hand
         // tracker's pose flickers, and a toggle on every change hid and showed the dock at random.
@@ -42,6 +43,13 @@ namespace CardboardXR.Demos.Workspace
         {
             m_Core = core;
             PinchRouter.Handler = this;
+
+            // Nothing in the app plays sound, so no scene has an AudioListener, and without one Unity
+            // plays nothing: the key and trackpad clicks and the windows' spatial audio would be silent.
+            // The listener goes on the head, so 3D sounds follow where the user looks (and AirPods
+            // head tracking can do the rest).
+            if (Object.FindFirstObjectByType<AudioListener>() == null)
+                m_AddedListener = m_Core.Head.gameObject.AddComponent<AudioListener>();
 
             // Cinema Dimmer
             m_Cinema = gameObject.AddComponent<CinemaDimmer>();
@@ -98,6 +106,9 @@ namespace CardboardXR.Demos.Workspace
 
             if (m_ControlDock != null)
                 Destroy(m_ControlDock.gameObject);
+
+            if (m_AddedListener != null)
+                Destroy(m_AddedListener);
 
             // These components sit on this demo's own GameObject: destroy the components, not the object.
             if (m_Cinema != null)
