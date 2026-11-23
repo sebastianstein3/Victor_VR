@@ -163,7 +163,7 @@ namespace CardboardXR.Demos.Workspace
             // kit recommends, and the panel is as wide as they are, plus a 16 dp margin each side.
             const float gap = M3Theme.k_TargetGap;
             const float margin = 16f;
-            string[] labels = { "Monitor", "Pulpit PC", "Telefon", "Głos", "PL", "Kino", "Reset biurka" };
+            string[] labels = { "Monitor", "Pulpit PC", "Telefon", "Głos", "PL", "Kino", "Wyśrodkuj" };
             var widths = new float[labels.Length];
             float total = gap * (labels.Length - 1);
             for (int i = 0; i < labels.Length; i++)
@@ -189,7 +189,7 @@ namespace CardboardXR.Demos.Workspace
             m_VoiceBtn = Add(3, "VoiceBtn", M3Button.Variant.Outlined, ToggleVoiceDictation);
             m_LanguageBtn = Add(4, "LanguageBtn", M3Button.Variant.Text, ToggleDictationLanguage);
             m_CinemaBtn = Add(5, "CinemaBtn", M3Button.Variant.Outlined, ToggleCinemaMode);
-            Add(6, "ResetDeskBtn", M3Button.Variant.Tonal, ResetDeskPosition);
+            Add(6, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
 
             WorkspaceSounds.Attach(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
@@ -227,6 +227,34 @@ namespace CardboardXR.Demos.Workspace
             WorldUi.PlaceInFront((RectTransform)m_Keyboard.transform, m_Core.Head, k_KeyboardDistance, k_DeskPitch, 0f);
             if (m_Trackpad != null)
                 WorldUi.PlaceInFront((RectTransform)m_Trackpad.transform, m_Core.Head, k_KeyboardDistance, k_DeskPitch, k_TrackpadYaw);
+        }
+
+        // Like holding the Digital Crown on Vision Pro: everything comes back around where the user now
+        // looks, each window to its slot (pinned ones too), the phone, the dock and the desk; drags end.
+        void RecenterAll()
+        {
+            if (m_Core == null)
+                return;
+            if (m_GroupDrag)
+                SetGroupDrag(false);
+            m_HomeYaw = FlatYaw();
+            foreach (var screen in m_Screens)
+            {
+                if (screen == null)
+                    continue;
+                screen.StopDragging();
+                int slot = m_ScreenSlots.TryGetValue(screen, out var s) ? s : 0;
+                PlaceAround(screen.transform, k_ScreenDistance, k_ScreenSlotYaws[slot % k_ScreenSlotYaws.Length],
+                    k_ScreenPitch + (slot / k_ScreenSlotYaws.Length) * k_ScreenRowPitch);
+            }
+            if (m_PhoneScreen != null)
+            {
+                m_PhoneScreen.StopDragging();
+                PlaceAround(m_PhoneScreen.transform, k_PhoneDistance, k_PhoneYaw, 0f);
+            }
+            if (m_ControlDock != null)
+                PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
+            ResetDeskPosition();
         }
 
         // Puts a panel at yaw/pitch degrees from the demo's home heading, facing the head.
@@ -424,6 +452,9 @@ namespace CardboardXR.Demos.Workspace
                 case "reset biurka": case "klawiatura": case "keyboard":
                     ResetDeskPosition();
                     break;
+                case "wyśrodkuj": case "wyśrodkuj wszystko": case "recenter":
+                    RecenterAll();
+                    break;
                 case "następny ekran": case "next screen":
                     SelectNextScreen();
                     break;
@@ -578,7 +609,7 @@ namespace CardboardXR.Demos.Workspace
 
         void ToggleWorkspaceVisibility() => SetDeskVisible(!m_WorkspaceVisible);
 
-        // The STOP gesture hides only the keyboard and trackpad; the dock stays, and its "Reset biurka"
+        // The STOP gesture hides only the keyboard and trackpad; the dock stays, and its "Wyśrodkuj"
         // brings them back, so an accidental palm can't leave the user without controls.
         void SetDeskVisible(bool visible)
         {

@@ -148,12 +148,36 @@ namespace CardboardXR.Demos.Workspace
             M3.Button("ClearBtn", m_CanvasRect, "Wyczyść", M3Button.Variant.Text,
                 new Vector2(190f, k_FooterY), Clear, null, 110f);
 
+            // Window size: smaller / larger (footer, between the counter at x<-30 and Clear at x>135)
+            M3.Button("SmallerBtn", m_CanvasRect, "-", M3Button.Variant.Text,
+                new Vector2(20f, k_FooterY), () => Resize(1f / k_SizeStep), null, M3.k_ButtonHeight);
+            M3.Button("LargerBtn", m_CanvasRect, "+", M3Button.Variant.Text,
+                new Vector2(84f, k_FooterY), () => Resize(k_SizeStep), null, M3.k_ButtonHeight);
+
             // 4. Bottom Grab Bar (Grab to drag anywhere in the room)
             m_GrabButton = M3.Button("GrabBar", m_CanvasRect, "Chwyć, aby przenieść ekran", M3Button.Variant.Tonal,
                 new Vector2(0f, k_GrabY), OnGrabClicked, "open_with", k_DefaultWidth - 60f);
         }
 
         // The area the remote desktop picture fills, the same as the text area.
+        // Size steps. Kept between 0.75x and 1.25x: the layout leaves 5 degrees between 41-degree windows,
+        // so a much bigger window would cover its neighbour (and the nearer panel takes the gaze).
+        const float k_SizeStep = 1.12f;
+        const float k_MinSize = 0.75f;
+        const float k_MaxSize = 1.25f;
+        float m_Size = 1f;
+
+        void Resize(float factor)
+        {
+            float size = Mathf.Clamp(m_Size * factor, k_MinSize, k_MaxSize);
+            if (Mathf.Approximately(size, m_Size))
+                return;
+            // M3Canvas sets the scale that makes 1 unit 1 dp at the window's distance; size multiplies it.
+            transform.localScale *= size / m_Size;
+            m_Size = size;
+            Focused?.Invoke(this);
+        }
+
         public static Vector2 BodyCenter => new(0f, k_BodyY);
         public static Vector2 BodySize => new(k_DefaultWidth - 60f, k_BodyHeight);
 

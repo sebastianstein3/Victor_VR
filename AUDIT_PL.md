@@ -133,8 +133,10 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
    płaszczyzną klawiatury, zanim stuknięcie go wciśnie.
 
 **Średni:**
-6. Suwak odległości/rozmiaru okien (`M3.Slider`), przełącznik układów (`M3.Segments`), dock jako
-   `M3Toolbar`.
+6. ~~Rozmiar okien~~ **zrobione**: przyciski „-” / „+” w stopce okna (0,75–1,25×, więcej by zasłaniało
+   sąsiednie okno). ~~Wyśrodkowanie~~ **zrobione**: przycisk „Wyśrodkuj” w docku (i komenda głosowa
+   „wyśrodkuj”) ustawia okna, telefon, dock i biurko przed użytkownikiem. Zostało: przełącznik układów
+   (`M3.Segments`), dock jako `M3Toolbar`.
 7. Zdalny pulpit naprawdę: Moonlight/Sunshine (niskie opóźnienie) lub WebRTC (`com.unity.webrtc`);
    input z gładzika/klawiatury jest już kierowany do `RemoteDesktopReceiver`.
 8. WebView (np. Vuplex 3D WebView) dla Messengera itp. – płatna wtyczka; uwaga na regulaminy serwisów.
@@ -146,6 +148,7 @@ na klawiaturę**; do pisania bez patrzenia używaj klawiatury Bluetooth. Przy ~1
 
 **Niski / eksperymenty:**
 11. Gesty: ~~pięść = przenieś wszystkie okna~~ **zrobione** (trzymaj pięść 0,5 s, obracaj głową, otwórz
-    dłoń, aby odłożyć; przypięte okna zostają). Zostało: dłoń do siebie = menu na nadgarstku.
+    dłoń, aby odłożyć; przypięte okna zostają). Menu na nadgarstku **odrzucone**: gest „dłoń do siebie + uszczypnięcie” otwiera już ustawienia bazy
+    (`SettingsSummoner`), kolidowałoby.
 12. `PassthroughLighting` dla oświetlenia okien jak w pokoju; `ScreenFade` przy otwieraniu/zamykaniu.
 13. Zmierzony profil optyczny Shinecon G10 (patrz pkt 9 w sekcji 2).
