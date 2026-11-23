@@ -36,3 +36,6 @@ ekranem (kolejne „Aplikacje” = kolejne ekrany). Na Macu doinstaluj `pip inst
 - **Aplikacji z iPhone'a, który jest w goglach, nie da się pokazać**: iOS nie pozwala jednej aplikacji
   widzieć ekranu innej, a jedyny ekran telefonu jest zajęty przez gogle. iPhone Mirroring z macOS jest
   niedostępne w UE i wymaga zablokowanego iPhone'a.
+
+
+Krok po kroku dla użytkownika (z iPadem i aplikacjami): [SAMOUCZEK_EKRANY.md](../SAMOUCZEK_EKRANY.md)
