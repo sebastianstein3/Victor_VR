@@ -29,6 +29,9 @@ namespace CardboardXR.Demos.Workspace
         int m_Page;
         bool m_CloseOnPick;
 
+        // The list stays after a choice (the Pliki window: picking a file copies it, the list remains)
+        public bool KeepAfterPick { get; set; }
+
         // closeOnPick: the window closes after a choice (a menu); otherwise the owner replaces it
         public void Initialize(VirtualScreen screen, string title, IEnumerable<Choice> choices, string emptyMessage = null,
             bool closeOnPick = true)
@@ -42,6 +45,17 @@ namespace CardboardXR.Demos.Workspace
             m_Message = M3.Text("ChoiceMessage", m_Screen.Rect, emptyMessage ?? "", M3Theme.Type.BodyMedium,
                 VirtualScreen.BodyCenter, new Vector2(VirtualScreen.BodySize.x, 120f), M3Theme.OnSurfaceVariant);
             m_Choices.AddRange(choices);
+            m_Message.gameObject.SetActive(m_Choices.Count == 0);
+            ShowPage();
+        }
+
+        // New choices in the same window (a list that changed)
+        public void SetChoices(IEnumerable<Choice> choices, string emptyMessage = null)
+        {
+            m_Choices.Clear();
+            m_Choices.AddRange(choices);
+            if (emptyMessage != null)
+                m_Message.text = emptyMessage;
             m_Message.gameObject.SetActive(m_Choices.Count == 0);
             ShowPage();
         }
@@ -76,6 +90,11 @@ namespace CardboardXR.Demos.Workspace
 
         void Pick(Choice choice)
         {
+            if (KeepAfterPick)
+            {
+                choice.Picked?.Invoke();
+                return;
+            }
             if (m_CloseOnPick)
             {
                 choice.Picked?.Invoke();

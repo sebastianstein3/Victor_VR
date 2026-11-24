@@ -126,7 +126,7 @@ działający na iPhonie, wyświetlany jako okno w VR.
 ## Narzędzia z menu Więcej
 
 Przycisk **Więcej** w docku (albo głos „więcej”) otwiera menu: Napisy na żywo, Zegar, Minutnik, Notatka,
-Pogoda, Kalendarz, Czytnik PDF, Środowisko, Modele 3D, Zdjęcia 3D, Samouczek.
+Pogoda, Kalendarz, Czytnik PDF, Środowisko, Modele 3D, Zdjęcia 3D, Filmy, Pliki (iCloud), Samouczek.
 
 | Narzędzie | Co robi | Pliki i głos |
 |---|---|---|
@@ -139,10 +139,23 @@ Pogoda, Kalendarz, Czytnik PDF, Środowisko, Modele 3D, Zdjęcia 3D, Samouczek.
 | Środowisko | Zmierzch, Noc, Ocean, Kosmos albo własne zdjęcie 360 (.jpg/.png equirectangular) lub wideo 360 (.mp4/.mov). Kamera przezroczysta jest wtedy wyłączona | folder `Srodowiska`; „środowisko”, „pokój” wyłącza |
 | Modele 3D | .glb/.gltf stawiane na prawdziwej powierzchni, na którą patrzysz; panel -30° / +30° / - / + obraca i skaluje. Wymaga pakietu `com.unity.cloud.gltfast` w buildzie | folder `Modele`; „modele” |
 | Zdjęcia 3D | Zdjęcia przestrzenne HEIC i filmy przestrzenne MV-HEVC z iPhone'a 15 Pro / 16 Pro (filmy: iOS 17+), obrazy obok siebie .jpg/.png z `_sbs` w nazwie, inne obrazy płasko. Każde oko widzi swój obraz. Dalej/wstecz: przyciski w stopce, gest góra/dół, „następne” / „poprzednie” | folder `Przestrzenne`; „zdjęcia 3d” |
+| Filmy | Twoje filmy .mp4/.mov/.m4v (H.264 lub HEVC) w oknie: -10 s, pauza, +10 s, następny, **Kino** (przyciemnia pokój i pokazuje film na dużym ekranie kinowym). Okno można rozciągnąć | folder `Filmy`; „filmy”, „pauza” / „odtwórz”, „następne” |
+| Pliki (iCloud) | Kopiuje pliki z iCloud Drive (i innych miejsc z aplikacji Pliki) do właściwych folderów aplikacji – bez Findera. Patrz niżej | „pliki” |
 
 **Jak wgrać pliki:** na Macu Finder > iPhone > Pliki > CardboardXR, przeciągnij pliki do właściwego folderu
 (`PDF`, `Srodowiska`, `Modele`, `Przestrzenne`; brakujący folder utwórz). Albo w aplikacji Pliki na iPhonie:
 Na moim iPhonie > CardboardXR. Nazwy folderów bez polskich znaków, jak wyżej.
+
+**Bez Findera – Więcej > Pliki:**
+1. **Z telefonu (zdejmij gogle):** okno wyboru plików pojawi się na ekranie iPhone'a. Wyjmij telefon z gogli,
+   zaznacz pliki (iCloud Drive, Na moim iPhonie, Dysk Google…), włóż telefon z powrotem.
+2. **Połącz folder iCloud** (raz): wybierz folder, np. utwórz na Macu `iCloud Drive/VisionPro` i wrzucaj tam
+   pliki. Od tej pory jego zawartość widać w oknie „Pliki” w goglach – jedno uszczypnięcie kopiuje plik
+   (ikona chmury: plik pobierze się z iCloud; ptaszek: już skopiowany). „Odśwież” czyta folder od nowa.
+
+Każdy plik trafia sam do właściwego folderu: PDF → `PDF`, .glb → `Modele`, filmy → `Filmy` (przestrzenne
+MV-HEVC → `Przestrzenne`, z „360” w nazwie → `Srodowiska`), zdjęcia 2:1 → `Srodowiska`, pozostałe zdjęcia i
+HEIC → `Przestrzenne`, reszta → `Inne`. Nic nie jest nadpisywane: drugi plik o tej samej nazwie dostaje „(2)”.
 
 ## Gdy coś nie działa
 

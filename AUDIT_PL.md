@@ -259,3 +259,16 @@ jest opcjonalny (`CXR_GLTF`).
 - **EventKit:** uprawnienie do kalendarza (`NSCalendarsFullAccessUsageDescription`), zachowanie po odmowie.
 - Ogólnie: pogoda wymaga internetu, PDF i środowiska wideo – pamięć i płynność, passthrough po wyjściu ze
   środowiska, zapis widgetów w `workspace.json`.
+
+### 6a. Filmy i Pliki (iCloud)
+Dodane: odtwarzacz własnych filmów (`FilmPlayer.cs`: `Documents/Filmy`, VideoPlayer, -10 s / pauza / +10 s /
+następny / Kino; ekran kinowy pokazuje ostatnio odtwarzany film, a gdy go nie ma – klip z telefonu) oraz
+import plików (`FileImport.cs`, `CardboardXRFiles.mm`, framework UniformTypeIdentifiers): systemowe okno
+wyboru plików (na ekranie telefonu, trzeba wyjąć go z gogli) i jednorazowo połączony folder (zakładka
+security-scoped w `NSUserDefaults`), którego pliki kopiuje się już w goglach; iCloud pobiera je przez
+`NSFileCoordinator`. Pliki trafiają do folderu wg rodzaju; nazwy sprawdzane (bez `/`, `:`, ukrytych), bez
+nadpisywania. `ChoiceList` dostał `SetChoices` i `KeepAfterPick`.
+
+Nie testowane: wygląd okna wyboru plików nad widokiem Unity (i powrót do VR), odświeżanie zakładki po
+zmianie nazwy folderu, pobieranie dużych plików z iCloud (brak paska postępu – tylko status w tytule),
+formaty, których VideoPlayer na iOS nie odtwarza (np. .mkv, AV1).

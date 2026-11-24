@@ -687,6 +687,8 @@ namespace CardboardXR.Demos.Workspace
                 new("Środowisko", OpenEnvironmentPicker),
                 new("Modele 3D", OpenModelPicker),
                 new("Zdjęcia 3D", OpenSpatialPicker),
+                new("Filmy", OpenFilmPicker, "movie"),
+                new("Pliki (iCloud)", OpenFiles, "cloud_download"),
             };
             choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
@@ -710,6 +712,36 @@ namespace CardboardXR.Demos.Workspace
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Wybierz PDF", choices,
                 "Brak plików PDF. Wrzuć je do folderu PDF aplikacji: Finder > iPhone > Pliki > CardboardXR, albo aplikacja Pliki.",
                 closeOnPick: false);
+        }
+
+        // ---- Your films, in a window or on the cinema screen ----
+        public void OpenFilmPicker()
+        {
+            var screen = CreateNewScreen("Filmy");
+            if (screen == null)
+                return;
+            var files = FilmPlayer.FindFiles();
+            var choices = new List<ChoiceList.Choice>();
+            for (int i = 0; i < files.Count; i++)
+            {
+                int index = i;
+                string name = System.IO.Path.GetFileNameWithoutExtension(files[i]);
+                if (name.Length > 26)
+                    name = name.Substring(0, 25) + "…";
+                choices.Add(new ChoiceList.Choice(name,
+                    () => screen.gameObject.AddComponent<FilmPlayer>().Initialize(screen, files, index, ToggleCinemaMode)));
+            }
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Wybierz film", choices,
+                "Brak filmów. Wrzuć .mp4 / .mov do folderu Filmy aplikacji (Finder, aplikacja Pliki albo Więcej > Pliki).",
+                closeOnPick: false);
+        }
+
+        // ---- Files from iCloud Drive and other places, into the app's folders ----
+        public void OpenFiles()
+        {
+            var screen = CreateNewScreen("Pliki");
+            if (screen != null)
+                screen.gameObject.AddComponent<FileImport>().Initialize(screen);
         }
 
         // ---- Spatial photos and videos (iPhone 15 Pro / 16 Pro) ----
@@ -982,6 +1014,8 @@ namespace CardboardXR.Demos.Workspace
                 case "następna strona": case "dalej": case "next page": case "następne": case "następne zdjęcie":
                     m_ActiveScreen?.GetComponent<PdfView>()?.NextPage();
                     m_ActiveScreen?.GetComponent<SpatialMediaView>()?.Next();
+                    if (m_ActiveScreen != null && m_ActiveScreen.GetComponent<FilmPlayer>() != null)
+                        m_ActiveScreen.GetComponent<FilmPlayer>().Next();
                     break;
                 case "poprzednia strona": case "previous page": case "poprzednie": case "poprzednie zdjęcie":
                     m_ActiveScreen?.GetComponent<PdfView>()?.PreviousPage();
@@ -989,6 +1023,21 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "zdjęcia 3d": case "zdjęcia": case "przestrzenne": case "filmy 3d": case "spatial":
                     OpenSpatialPicker();
+                    break;
+                case "filmy": case "film": case "wideo": case "movies":
+                    OpenFilmPicker();
+                    break;
+                case "pauza": case "odtwórz": case "pause": case "play":
+                {
+                    var film = m_ActiveScreen != null ? m_ActiveScreen.GetComponent<FilmPlayer>() : null;
+                    if (film == null)
+                        film = FilmPlayer.Active;
+                    if (film != null)
+                        film.TogglePause();
+                    break;
+                }
+                case "pliki": case "icloud": case "importuj": case "files":
+                    OpenFiles();
                     break;
                 case "środowisko": case "środowiska": case "environment":
                     OpenEnvironmentPicker();
@@ -1136,7 +1185,7 @@ namespace CardboardXR.Demos.Workspace
             m_CinemaImage = imageRect.gameObject.AddComponent<UnityEngine.UI.RawImage>();
             m_CinemaImage.raycastTarget = false;
             m_CinemaImage.enabled = false;
-            m_CinemaHint = M3.Text("CinemaHint", m_CinemaPanel, "Włącz klip w telefonie (TikTok, Shorts, Reels, Twitch)",
+            m_CinemaHint = M3.Text("CinemaHint", m_CinemaPanel, "Włącz film (Więcej > Filmy) albo klip w telefonie",
                 M3Theme.Type.BodyLarge, Vector2.zero, new Vector2(600f, 40f), M3Theme.OnSurfaceVariant);
             // In front of where the user looks now (not a slot: it's for watching, not working)
             WorldUi.PlaceInFront(m_CinemaPanel, m_Core.Head, k_CinemaDistance, k_ScreenPitch, 0f);
@@ -1146,7 +1195,10 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_CinemaPanel == null)
                 return;
-            var texture = m_PhoneScreen != null ? m_PhoneScreen.PlayingTexture : null;
+            // Your film first (the most recently played), else the phone's clip
+            var texture = FilmPlayer.Active != null ? FilmPlayer.Active.PlayingTexture : null;
+            if (texture == null && m_PhoneScreen != null)
+                texture = m_PhoneScreen.PlayingTexture;
             bool playing = texture != null;
             m_CinemaImage.enabled = playing;
             m_CinemaHint.gameObject.SetActive(!playing);

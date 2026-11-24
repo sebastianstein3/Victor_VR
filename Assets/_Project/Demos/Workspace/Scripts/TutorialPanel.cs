@@ -57,10 +57,10 @@ namespace CardboardXR.Demos.Workspace
 
             "<b>Więcej: narzędzia</b>\n\n" +
             "Przycisk <b>Więcej</b> w docku: napisy na żywo, zegar, minutnik, notatka, pogoda, kalendarz, czytnik PDF, " +
-            "środowiska 360, modele 3D, zdjęcia 3D.\n" +
-            "Pliki wgraj przez Finder (iPhone > Pliki) do folderów: <b>PDF</b>, <b>Srodowiska</b>, " +
-            "<b>Modele</b>, <b>Przestrzenne</b>.\n" +
-            "Głos: napisy, pdf, środowisko, pokój, modele, zdjęcia 3d.",
+            "środowiska 360, modele 3D, zdjęcia 3D, filmy.\n" +
+            "<b>Pliki (iCloud)</b>: połącz raz folder z iCloud Drive, potem kopiujesz pliki w goglach. " +
+            "Albo Finder (iPhone > Pliki): <b>PDF</b>, <b>Filmy</b>, <b>Srodowiska</b>, <b>Modele</b>, <b>Przestrzenne</b>.\n" +
+            "Głos: napisy, pdf, filmy, pauza, pliki, środowisko, modele, zdjęcia 3d.",
 
             "<b>Gdy coś nie działa</b>\n\n" +
             "Brak połączenia: czy serwer działa i ta sama sieć Wi-Fi?\n" +

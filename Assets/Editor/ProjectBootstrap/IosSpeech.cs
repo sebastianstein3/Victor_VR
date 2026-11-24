@@ -73,6 +73,7 @@ namespace ProjectBootstrap
             // Live captions' translation (Plugins/iOS/CardboardXRTranslate.swift): Translation exists from
             // iOS 17.4, so it is linked weakly (the plugin checks for iOS 26.4 itself); Swift needs a version
             project.AddFrameworkToProject(framework, "Translation.framework", true);
+            project.AddFrameworkToProject(framework, "UniformTypeIdentifiers.framework", false); // file picker (Pliki)
             if (string.IsNullOrEmpty(project.GetBuildPropertyForAnyConfig(framework, "SWIFT_VERSION")))
                 project.SetBuildProperty(framework, "SWIFT_VERSION", "5.0");
             project.WriteToFile(projectPath);
