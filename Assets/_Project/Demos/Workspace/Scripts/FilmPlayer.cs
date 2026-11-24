@@ -29,6 +29,11 @@ namespace CardboardXR.Demos.Workspace
         int m_Index;
         string m_Name;
         float m_NextTitle;
+        double m_StartTime;
+        bool m_StartPaused;
+
+        public string FilePath => m_Files != null && m_Index < m_Files.Count ? m_Files[m_Index] : null;
+        public double PlaybackTime => m_Player != null && m_Player.isPrepared ? m_Player.time : m_StartTime;
 
         public Texture PlayingTexture => m_Player != null && m_Player.isPrepared && m_Texture != null ? m_Texture : null;
         public bool IsPlaying => m_Player != null && m_Player.isPlaying;
@@ -57,8 +62,12 @@ namespace CardboardXR.Demos.Workspace
             return files;
         }
 
-        public void Initialize(VirtualScreen screen, List<string> files, int index, Action toggleCinema)
+        // startTime / startPaused: a film restored with the workspace waits, paused where it was left
+        public void Initialize(VirtualScreen screen, List<string> files, int index, Action toggleCinema,
+            double startTime = 0.0, bool startPaused = false)
         {
+            m_StartTime = startTime;
+            m_StartPaused = startPaused;
             m_Screen = screen;
             m_Files = files;
             m_Screen.ShowBody(false);
@@ -144,7 +153,13 @@ namespace CardboardXR.Demos.Workspace
             m_Image.texture = m_Texture;
             m_Image.enabled = true;
             Fit();
-            player.Play();
+            if (m_StartTime > 0.0 && player.canSetTime)
+                player.time = Math.Min(m_StartTime, Math.Max(0.0, player.length - 1.0));
+            m_StartTime = 0.0;
+            player.Play(); // shows a frame; paused again below when restored
+            if (m_StartPaused)
+                m_PauseOnFrame = true;
+            m_StartPaused = false;
             SetPlayIcon();
         }
 
@@ -154,7 +169,7 @@ namespace CardboardXR.Demos.Workspace
             Debug.LogWarning($"[Workspace] Film {m_Name}: {message}");
         }
 
-        void Seek(double seconds)
+        public void Seek(double seconds)
         {
             if (m_Player == null || !m_Player.isPrepared || !m_Player.canSetTime)
                 return;
@@ -176,8 +191,16 @@ namespace CardboardXR.Demos.Workspace
                 RemoteDesktopReceiver.FitInside(m_Texture.width / (float)Mathf.Max(1, m_Texture.height), m_Screen.BodySizeNow);
         }
 
+        bool m_PauseOnFrame;
+
         void Update()
         {
+            if (m_PauseOnFrame && m_Player != null && m_Player.isPlaying && m_Player.frame > 0)
+            {
+                m_PauseOnFrame = false;
+                m_Player.Pause();
+                SetPlayIcon();
+            }
             // Time in the title once a second
             if (m_Player == null || !m_Player.isPrepared || Time.unscaledTime < m_NextTitle)
                 return;

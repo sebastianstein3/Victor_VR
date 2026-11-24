@@ -20,6 +20,8 @@ namespace CardboardXR.Demos.Workspace
         M3Button m_GrabButton;
         M3Button m_PinButton;
         RectTransform m_CursorRect;
+        UnityEngine.UI.Image m_Divider;
+        bool m_Highlighted;
         Vector2 m_CursorPos = Vector2.zero;
         AudioSource m_SpatialAudio;
 
@@ -170,8 +172,8 @@ namespace CardboardXR.Demos.Workspace
                 new Vector2(226f, k_HeaderY), CloseScreen, M3.k_ButtonHeight);
 
             // Divider line
-            M3.Surface("HeaderDivider", m_CanvasRect, new Vector2(0f, 148f),
-                new Vector2(k_DefaultWidth - 40f, 2f), M3Theme.OutlineVariant, 0f);
+            m_Divider = M3.Surface("HeaderDivider", m_CanvasRect, new Vector2(0f, 148f),
+                new Vector2(k_DefaultWidth - 40f, 3f), M3Theme.OutlineVariant, 0f);
 
             // 2. Document Text Area (Center)
             m_BodyText = M3.Text("Content", m_CanvasRect, m_Content, M3Theme.Type.BodyLarge,
@@ -299,7 +301,7 @@ namespace CardboardXR.Demos.Workspace
             AtTopLeftToRight(m_TitleText.rectTransform, 20f, 140f, 32f, 40f);
             Pin("PinBtn", new Vector2(1f, 1f), new Vector2(-98f, -32f));
             Pin("CloseBtn", new Vector2(1f, 1f), new Vector2(-34f, -32f));
-            AtTopLeftToRight((RectTransform)m_CanvasRect.Find("HeaderDivider"), 20f, 20f, 72f, 2f);
+            AtTopLeftToRight((RectTransform)m_CanvasRect.Find("HeaderDivider"), 20f, 20f, 72f, 3f);
             AttachToBody(m_BodyText.rectTransform);
             Pin("Footer", new Vector2(0f, 0f), new Vector2(130f, 112f));
             Pin("SmallerBtn", new Vector2(0.5f, 0f), new Vector2(20f, 112f));
@@ -555,6 +557,18 @@ namespace CardboardXR.Demos.Workspace
             if (m_Pinned && m_IsDragging)
                 StopDragging();
         }
+
+        // The window typing, the trackpad and swipes go to: its header line and title in the accent colour
+        public void SetHighlighted(bool on)
+        {
+            m_Highlighted = on;
+            if (m_Divider != null)
+                m_Divider.color = on ? M3Theme.Primary : M3Theme.OutlineVariant;
+            if (m_TitleText != null)
+                m_TitleText.color = on ? M3Theme.Primary : M3Theme.OnSurface;
+        }
+
+        public bool Highlighted => m_Highlighted;
 
         public void Close() => CloseScreen();
 

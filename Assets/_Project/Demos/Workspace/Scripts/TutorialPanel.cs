@@ -53,11 +53,12 @@ namespace CardboardXR.Demos.Workspace
             "Pisanie: klawiatura biurkowa, Bluetooth albo <b>Głos</b>.\n" +
             "Rozciąganie: uchwyt w prawym dolnym rogu, potem prowadź wzrokiem róg, uszczypnij = koniec.\n" +
             "Skala całego okna: <b>-</b> / <b>+</b> (do 2x).\n" +
-            "<b>Wyśrodkuj</b> ustawia wszystko przed Tobą.",
+            "Aktywne okno ma fioletowy tytuł; gest w lewo/prawo wybiera sąsiednie.\n" +
+            "Głos: „zamknij”, „przenieś” i „upuść”. <b>Wyśrodkuj</b> ustawia wszystko przed Tobą.",
 
             "<b>Więcej: narzędzia</b>\n\n" +
-            "Przycisk <b>Więcej</b> w docku: napisy na żywo, zegar, minutnik, notatka, pogoda, kalendarz, czytnik PDF, " +
-            "środowiska 360, modele 3D, zdjęcia 3D, filmy.\n" +
+            "Przycisk <b>Więcej</b> w docku: napisy, widżety (zegar, minutnik, notatka, pogoda, kalendarz), PDF, " +
+            "filmy, zdjęcia 3D, środowiska 360, modele 3D, pliki.\n" +
             "<b>Pliki (iCloud)</b>: połącz raz folder z iCloud Drive, potem kopiujesz pliki w goglach. " +
             "Albo Finder (iPhone > Pliki): <b>PDF</b>, <b>Filmy</b>, <b>Srodowiska</b>, <b>Modele</b>, <b>Przestrzenne</b>.\n" +
             "Głos: napisy, pdf, filmy, pauza, pliki, środowisko, modele, zdjęcia 3d.",

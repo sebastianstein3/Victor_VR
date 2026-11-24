@@ -31,6 +31,8 @@ namespace CardboardXR.Demos.Workspace
         int m_VideoId;
         float m_Aspect = 16f / 9f;
 
+        public string FilePath => m_Files != null && m_Index < m_Files.Count ? m_Files[m_Index] : null;
+
         public static List<string> FindFiles()
         {
             var files = new List<string>();

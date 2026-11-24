@@ -272,3 +272,25 @@ nadpisywania. `ChoiceList` dostał `SetChoices` i `KeepAfterPick`.
 Nie testowane: wygląd okna wyboru plików nad widokiem Unity (i powrót do VR), odświeżanie zakładki po
 zmianie nazwy folderu, pobieranie dużych plików z iCloud (brak paska postępu – tylko status w tytule),
 formaty, których VideoPlayer na iOS nie odtwarza (np. .mkv, AV1).
+
+### 6b. Dopracowanie mechanik okien i narzędzi
+- **Nowe okna tam, gdzie patrzysz** (`WorkspaceLayout.cs`): wolny slot najbliżej wzroku zamiast kolejnego
+  od „przodu”; slot zakryty przez przeciągnięte lub rozciągnięte okno, telefon, dok, widżet czy ekran kinowy
+  jest pomijany (pudełka kątowe widziane z głowy). Menu zamyka się **przed** otwarciem wybranego narzędzia,
+  więc narzędzie zajmuje jego miejsce, a nie sąsiedni slot.
+- **Widżety nie zasłaniają okien**: stawiane przy wzroku, ale z dala od wszystkich paneli (zwykle nad
+  rzędem okien); wcześniej wisiały 1,1 m przed oknem głównym i zabierały mu wzrok.
+- **Aktywne okno widać**: fioletowa linia pod nagłówkiem i tytuł. Naciśnięcie dowolnego przycisku w oknie
+  (np. w przeglądarce) robi je aktywnym – wcześniej przycisk przejmował uszczypnięcie i pisanie szło do innego
+  okna (`WorkspaceSounds.Pressed`). Po zamknięciu aktywne staje się okno najbliżej wzroku.
+- **Gest w lewo/prawo** wybiera okno po lewej/prawej w przestrzeni (wcześniej kolejność tworzenia).
+- **Pięść** przenosi też widżety; „upuść” lub uszczypnięcie kończy każde przenoszenie (`DropCarried`).
+- **Głos:** „zamknij”, „przenieś” (okno idzie za głową), „upuść”, „widżety”.
+- **Więcej:** jedna strona 3 × 3 (widżety w osobnym menu), przycisk w docku otwiera i zamyka (jedno menu naraz).
+- **Filmy:** gest góra/dół przewija o 30 s.
+- **Zapis układu:** okna filmów (plik i miejsce – wracają zatrzymane), zdjęć 3D i środowisko są
+  przywracane; okna, których plik zniknął, nie wracają jako puste notatki. Wcześniej film i zdjęcie 3D
+  zapisywały się jako notatka z tekstem powitalnym.
+
+Nie testowane na urządzeniu: progi nakładania (−1° dla sąsiednich slotów, 2° dla widżetów), czytelność
+przycisków 148 dp w menu 3 × 3, pauza przywróconego filmu na pierwszej klatce.

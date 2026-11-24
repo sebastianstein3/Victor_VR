@@ -17,6 +17,10 @@ namespace CardboardXR.Demos.Workspace
         // sounds don't stack.
         public static bool Muted { get; set; }
 
+        // Any button that has the tap was pressed. WorkspaceDemo uses it to make the window the button is
+        // in the active one: a pinch on a button goes to the button, not to the demo (PinchRouter.Order).
+        public static event System.Action<Button> Pressed;
+
         // Gives every M3Button under root (that has none yet) the tap. Call it after building UI;
         // the desk keyboard doesn't use it, its keys click by themselves.
         public static void Attach(Component root)
@@ -78,7 +82,11 @@ namespace CardboardXR.Demos.Workspace
             {
                 var button = GetComponent<Button>();
                 if (button != null)
-                    button.onClick.AddListener(PlayTap);
+                    button.onClick.AddListener(() =>
+                    {
+                        PlayTap();
+                        Pressed?.Invoke(button);
+                    });
             }
         }
     }

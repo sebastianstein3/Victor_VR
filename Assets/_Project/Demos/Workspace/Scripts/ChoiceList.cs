@@ -10,9 +10,10 @@ namespace CardboardXR.Demos.Workspace
     // more): the "Więcej" menu and the lists of PDFs, environments, models and spatial photos use it.
     public class ChoiceList : MonoBehaviour
     {
-        const int k_Columns = 2;
         const int k_Rows = 3;
-        const float k_ButtonWidth = 222f;
+        int m_Columns = 2;
+        // The text area split into equal columns, 8 dp apart (2 columns: 222 dp; 3 columns: 148 dp)
+        float ButtonWidth => (VirtualScreen.BodySize.x - (m_Columns - 1) * 8f) / m_Columns;
 
         public struct Choice
         {
@@ -34,8 +35,9 @@ namespace CardboardXR.Demos.Workspace
 
         // closeOnPick: the window closes after a choice (a menu); otherwise the owner replaces it
         public void Initialize(VirtualScreen screen, string title, IEnumerable<Choice> choices, string emptyMessage = null,
-            bool closeOnPick = true)
+            bool closeOnPick = true, int columns = 2)
         {
+            m_Columns = Mathf.Clamp(columns, 1, 3);
             m_Screen = screen;
             m_CloseOnPick = closeOnPick;
             m_Screen.SetTitle(title);
@@ -64,25 +66,25 @@ namespace CardboardXR.Demos.Workspace
         {
             foreach (Transform child in m_Group)
                 Destroy(child.gameObject);
-            int perPage = m_Choices.Count > k_Columns * k_Rows ? k_Columns * k_Rows - 1 : k_Columns * k_Rows;
+            int perPage = m_Choices.Count > m_Columns * k_Rows ? m_Columns * k_Rows - 1 : m_Columns * k_Rows;
             int pages = Mathf.Max(1, Mathf.CeilToInt(m_Choices.Count / (float)perPage));
             m_Page %= pages;
             int first = m_Page * perPage;
             int shown = Mathf.Min(perPage, m_Choices.Count - first);
             for (int i = 0; i < shown + (pages > 1 ? 1 : 0); i++)
             {
-                int column = i % k_Columns, row = i / k_Columns;
-                var position = new Vector2((column - 0.5f) * (k_ButtonWidth + 8f), 64f - row * 64f);
+                int column = i % m_Columns, row = i / m_Columns;
+                var position = new Vector2((column - (m_Columns - 1) / 2f) * (ButtonWidth + 8f), 64f - row * 64f);
                 if (i < shown)
                 {
                     var choice = m_Choices[first + i];
                     M3.Button($"Choice_{i}", m_Group, choice.Label, M3Button.Variant.Tonal, position, () => Pick(choice),
-                        choice.Icon, k_ButtonWidth);
+                        choice.Icon, ButtonWidth);
                 }
                 else
                 {
                     M3.Button("ChoiceNext", m_Group, $"Dalej ({m_Page + 1}/{pages})", M3Button.Variant.Outlined, position,
-                        () => { m_Page++; ShowPage(); }, null, k_ButtonWidth);
+                        () => { m_Page++; ShowPage(); }, null, ButtonWidth);
                 }
             }
             WorkspaceSounds.Attach(m_Group);
@@ -97,8 +99,9 @@ namespace CardboardXR.Demos.Workspace
             }
             if (m_CloseOnPick)
             {
-                choice.Picked?.Invoke();
+                // Closed first, so what was picked can open in this window's place (the slot is free)
                 m_Screen.Close();
+                choice.Picked?.Invoke();
                 return;
             }
             Destroy(m_Group.gameObject);

@@ -125,8 +125,9 @@ działający na iPhonie, wyświetlany jako okno w VR.
 
 ## Narzędzia z menu Więcej
 
-Przycisk **Więcej** w docku (albo głos „więcej”) otwiera menu: Napisy na żywo, Zegar, Minutnik, Notatka,
-Pogoda, Kalendarz, Czytnik PDF, Środowisko, Modele 3D, Zdjęcia 3D, Filmy, Pliki (iCloud), Samouczek.
+Przycisk **Więcej** w docku (albo głos „więcej”) otwiera menu: Napisy,
+Widżety (Zegar, Minutnik, Notatka, Pogoda, Kalendarz), PDF, Filmy, Zdjęcia 3D, Środowisko, Modele 3D,
+Pliki, Samouczek – jedna strona 3 × 3. Drugie naciśnięcie **Więcej** zamyka menu.
 
 | Narzędzie | Co robi | Pliki i głos |
 |---|---|---|

@@ -174,6 +174,7 @@ namespace CardboardXR.Demos.Workspace
             m_Voice.RecordingStarted += OnVoiceStarted;
             m_Voice.RecordingEnded += OnVoiceEnded;
 
+            WorkspaceSounds.Pressed += OnButtonPressed;
             BuildControlDock();
             SpawnKeyboardAndTrackpad();
             // The windows of the last session, or a first notepad and the phone
@@ -251,6 +252,7 @@ namespace CardboardXR.Demos.Workspace
 
             SetCinemaScreen(false);
 
+            WorkspaceSounds.Pressed -= OnButtonPressed;
             WorkspaceSounds.Release();
             if (m_AddedListener != null)
                 Destroy(m_AddedListener);
@@ -497,13 +499,9 @@ namespace CardboardXR.Demos.Workspace
             if (m_Core == null)
                 return null;
 
-            // The first free slot: left and right of the first screen, then a row above.
+            // A new window: the free slot nearest where the user looks (WorkspaceLayout.cs). A saved one: its slot.
             if (slot < 0 || m_ScreenSlots.ContainsValue(slot))
-            {
-                slot = 0;
-                while (m_ScreenSlots.ContainsValue(slot))
-                    slot++;
-            }
+                slot = ChooseScreenSlot();
             float yaw = k_ScreenSlotYaws[slot % k_ScreenSlotYaws.Length];
             float pitch = k_ScreenPitch + (slot / k_ScreenSlotYaws.Length) * k_ScreenRowPitch;
 
@@ -536,6 +534,9 @@ namespace CardboardXR.Demos.Workspace
             public string url; // with browser: the page
             public string pdf; // a PDF reader: the file and page
             public int pdfPage;
+            public string film;    // a film window: the file and where it was
+            public double filmTime;
+            public string media;   // a spatial photo/video window: the file shown
             public int slot;
             public float size = 1f;
             public float width;  // the window's stretched size in dp (0: default)
@@ -557,6 +558,7 @@ namespace CardboardXR.Demos.Workspace
             public List<SavedWidget> widgets = new();
             public bool phone;
             public string locale;
+            public string environment; // the place shown instead of the room (null: the room)
         }
 
         static string SaveFile => Path.Combine(Application.persistentDataPath, "workspace.json");
@@ -565,7 +567,12 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_Core == null)
                 return;
-            var saved = new SavedWorkspace { phone = m_PhoneScreen != null, locale = m_Voice != null ? m_Voice.Locale : null };
+            var saved = new SavedWorkspace
+            {
+                phone = m_PhoneScreen != null,
+                locale = m_Voice != null ? m_Voice.Locale : null,
+                environment = m_Environment != null ? m_Environment.Current : null,
+            };
             foreach (var widget in m_Widgets)
             {
                 if (widget != null && widget.Kind != "model")
@@ -574,7 +581,7 @@ namespace CardboardXR.Demos.Workspace
             foreach (var screen in m_Screens)
             {
                 if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
-                    screen.GetComponent<ChoiceList>() != null ||
+                    screen.GetComponent<ChoiceList>() != null || screen.GetComponent<FileImport>() != null ||
                     (screen.IsBrowser && screen.Browser.IsPrivate)) // a private window leaves no trace
                     continue;
                 saved.screens.Add(new SavedScreen
@@ -587,6 +594,9 @@ namespace CardboardXR.Demos.Workspace
                     url = screen.IsBrowser ? screen.Browser.Url : null,
                     pdf = screen.GetComponent<PdfView>() != null ? screen.GetComponent<PdfView>().FilePath : null,
                     pdfPage = screen.GetComponent<PdfView>() != null ? screen.GetComponent<PdfView>().Page : 0,
+                    film = screen.GetComponent<FilmPlayer>() != null ? screen.GetComponent<FilmPlayer>().FilePath : null,
+                    filmTime = screen.GetComponent<FilmPlayer>() != null ? screen.GetComponent<FilmPlayer>().PlaybackTime : 0.0,
+                    media = screen.GetComponent<SpatialMediaView>() != null ? screen.GetComponent<SpatialMediaView>().FilePath : null,
                     slot = m_ScreenSlots.TryGetValue(screen, out var slot) ? slot : -1,
                     size = screen.Size,
                     width = screen.LayoutSize.x,
@@ -624,10 +634,39 @@ namespace CardboardXR.Demos.Workspace
 
             foreach (var item in saved.screens)
             {
+                // A viewer whose file is gone (deleted, or the app reinstalled) is not brought back as an empty note
+                bool viewer = !string.IsNullOrEmpty(item.pdf) || !string.IsNullOrEmpty(item.film) || !string.IsNullOrEmpty(item.media);
+                // (JsonUtility writes missing strings as "", not null)
+                string file = !string.IsNullOrEmpty(item.pdf) ? item.pdf : !string.IsNullOrEmpty(item.film) ? item.film : item.media;
+                if (viewer && !File.Exists(file))
+                    continue;
                 var screen = CreateNewScreen(string.IsNullOrEmpty(item.title) ? "Ekran" : item.title, item.slot);
                 if (screen == null)
                     continue;
-                if (!string.IsNullOrEmpty(item.pdf) && System.IO.File.Exists(item.pdf))
+                if (!string.IsNullOrEmpty(item.film))
+                {
+                    var films = FilmPlayer.FindFiles();
+                    int index = films.IndexOf(item.film);
+                    if (index < 0) // a file outside the folder: shown first
+                    {
+                        films.Insert(0, item.film);
+                        index = 0;
+                    }
+                    screen.gameObject.AddComponent<FilmPlayer>().Initialize(screen, films, index, ToggleCinemaMode,
+                        item.filmTime, startPaused: true);
+                }
+                else if (!string.IsNullOrEmpty(item.media))
+                {
+                    var media = SpatialMediaView.FindFiles();
+                    int index = media.IndexOf(item.media);
+                    if (index < 0) // a file outside the folder: shown first
+                    {
+                        media.Insert(0, item.media);
+                        index = 0;
+                    }
+                    screen.gameObject.AddComponent<SpatialMediaView>().Initialize(screen, media, index);
+                }
+                else if (!string.IsNullOrEmpty(item.pdf))
                     screen.gameObject.AddComponent<PdfView>().Initialize(screen, item.pdf, item.pdfPage);
                 else if (item.browser)
                     screen.EnableBrowser(string.IsNullOrEmpty(item.url) ? null : item.url);
@@ -643,6 +682,9 @@ namespace CardboardXR.Demos.Workspace
             }
             if (saved.phone)
                 SpawnPhoneScreen();
+            if (m_Environment != null && !string.IsNullOrEmpty(saved.environment) &&
+                (Array.IndexOf(EnvironmentSphere.BuiltIn, saved.environment) >= 0 || File.Exists(saved.environment)))
+                m_Environment.Show(saved.environment);
             if (saved.widgets != null)
             {
                 foreach (var item in saved.widgets)
@@ -670,28 +712,50 @@ namespace CardboardXR.Demos.Workspace
         }
 
         // ---- "Więcej": the tools that don't fit in the dock ----
+        // The dock's "Więcej" button toggles it: one menu at a time. Nine tools on one page (3 x 3);
+        // the widgets have their own menu.
+        VirtualScreen m_MoreScreen;
+
         public void OpenMore()
         {
+            if (m_MoreScreen != null)
+            {
+                m_MoreScreen.Close();
+                return;
+            }
             var screen = CreateNewScreen("Więcej");
+            if (screen == null)
+                return;
+            m_MoreScreen = screen;
+            var choices = new List<ChoiceList.Choice>
+            {
+                new(m_Captions != null && m_Captions.IsOn ? "Bez napisów" : "Napisy", ToggleCaptions),
+                new("Widżety", OpenWidgetMenu),
+                new("PDF", OpenPdfPicker),
+                new("Filmy", OpenFilmPicker),
+                new("Zdjęcia 3D", OpenSpatialPicker),
+                new("Środowisko", OpenEnvironmentPicker),
+                new("Modele 3D", OpenModelPicker),
+                new("Pliki", OpenFiles),
+                new("Samouczek", OpenTutorial),
+            };
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices, columns: 3);
+        }
+
+        public void OpenWidgetMenu()
+        {
+            var screen = CreateNewScreen("Widżety");
             if (screen == null)
                 return;
             var choices = new List<ChoiceList.Choice>
             {
-                new(m_Captions != null && m_Captions.IsOn ? "Wyłącz napisy" : "Napisy na żywo", ToggleCaptions),
-                new("Zegar", () => SpawnWidget("zegar")),
-                new("Minutnik", () => SpawnWidget("minutnik")),
+                new("Zegar", () => SpawnWidget("zegar"), "timer"),
+                new("Minutnik", () => SpawnWidget("minutnik"), "timer"),
                 new("Notatka", () => SpawnWidget("notatka"), "edit"),
                 new("Pogoda", () => SpawnWidget("pogoda")),
                 new("Kalendarz", () => SpawnWidget("kalendarz")),
-                new("Czytnik PDF", OpenPdfPicker),
-                new("Środowisko", OpenEnvironmentPicker),
-                new("Modele 3D", OpenModelPicker),
-                new("Zdjęcia 3D", OpenSpatialPicker),
-                new("Filmy", OpenFilmPicker, "movie"),
-                new("Pliki (iCloud)", OpenFiles, "cloud_download"),
             };
-            choices.Add(new ChoiceList.Choice("Samouczek", OpenTutorial));
-            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices);
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Widżety", choices);
         }
 
         // ---- PDF reader ----
@@ -775,20 +839,28 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_Core == null)
                 return null;
+            const float distance = 1.1f;
+            Vector2 size = kind switch
+            {
+                "zegar" => new Vector2(300f, 190f),
+                "minutnik" => new Vector2(340f, 220f),
+                "notatka" => new Vector2(340f, 280f),
+                "pogoda" => new Vector2(360f, 200f),
+                _ => new Vector2(380f, 320f),
+            };
             WidgetPanel widget = kind switch
             {
-                "zegar" => WidgetPanel.Create<ClockWidget>(transform, m_Core.Head, new Vector2(300f, 190f), "Zegar"),
-                "minutnik" => WidgetPanel.Create<TimerWidget>(transform, m_Core.Head, new Vector2(340f, 220f), "Minutnik"),
-                "notatka" => WidgetPanel.Create<NoteWidget>(transform, m_Core.Head, new Vector2(340f, 280f), "Notatka"),
-                "pogoda" => WidgetPanel.Create<WeatherWidget>(transform, m_Core.Head, new Vector2(360f, 200f), "Pogoda"),
-                "kalendarz" => WidgetPanel.Create<CalendarWidget>(transform, m_Core.Head, new Vector2(380f, 320f), "Kalendarz"),
+                "zegar" => WidgetPanel.Create<ClockWidget>(transform, m_Core.Head, size, "Zegar", distance),
+                "minutnik" => WidgetPanel.Create<TimerWidget>(transform, m_Core.Head, size, "Minutnik", distance),
+                "notatka" => WidgetPanel.Create<NoteWidget>(transform, m_Core.Head, size, "Notatka", distance),
+                "pogoda" => WidgetPanel.Create<WeatherWidget>(transform, m_Core.Head, size, "Pogoda", distance),
+                "kalendarz" => WidgetPanel.Create<CalendarWidget>(transform, m_Core.Head, size, "Kalendarz", distance),
                 _ => null,
             };
             if (widget == null)
                 return null;
-            // Spread out so several don't land on each other
-            float yaw = (m_Widgets.Count % 4 - 1.5f) * 22f;
-            WorldUi.PlaceInFront((RectTransform)widget.transform, m_Core.Head, 1.1f, 14f, yaw);
+            // Near the gaze but clear of every window and widget (WorkspaceLayout.cs)
+            PlaceWidget((RectTransform)widget.transform, size, distance);
             widget.Closed += w =>
             {
                 m_Widgets.Remove(w);
@@ -855,17 +927,41 @@ namespace CardboardXR.Demos.Workspace
         void SetActiveScreen(VirtualScreen screen)
         {
             SetWritingNote(null); // a window chosen: typing goes to it, not to a note
+            if (m_ActiveScreen != null && m_ActiveScreen != screen)
+                m_ActiveScreen.SetHighlighted(false);
             m_ActiveScreen = screen;
+            if (screen != null)
+                screen.SetHighlighted(true);
             if (m_Trackpad != null)
                 m_Trackpad.SetTargetScreen(screen);
+        }
+
+        // A button pressed in a window makes that window the active one (typing and the trackpad go to it)
+        void OnButtonPressed(UnityEngine.UI.Button button)
+        {
+            if (button == null)
+                return;
+            foreach (var screen in m_Screens)
+            {
+                if (screen != null && screen != m_ActiveScreen && button.transform.IsChildOf(screen.transform))
+                {
+                    SetActiveScreen(screen);
+                    return;
+                }
+            }
         }
 
         void OnScreenClosed(VirtualScreen screen)
         {
             m_Screens.Remove(screen);
             m_ScreenSlots.Remove(screen);
+            if (m_MoreScreen == screen)
+                m_MoreScreen = null;
             if (m_ActiveScreen == screen)
-                SetActiveScreen(m_Screens.Count > 0 ? m_Screens[m_Screens.Count - 1] : null);
+            {
+                m_ActiveScreen = null;
+                SetActiveScreen(ScreenNearestGaze());
+            }
         }
 
         void OnKeyPressed(char c)
@@ -1060,6 +1156,20 @@ namespace CardboardXR.Demos.Workspace
                 case "zegar": case "minutnik": case "notatka": case "pogoda": case "kalendarz":
                     SpawnWidget(command);
                     break;
+                case "widżety": case "widgets":
+                    OpenWidgetMenu();
+                    break;
+                case "zamknij": case "zamknij okno": case "close": case "close window":
+                    if (m_ActiveScreen != null)
+                        m_ActiveScreen.Close();
+                    break;
+                case "przenieś": case "przenieś okno": case "przesuń okno": case "move": case "move window":
+                    if (m_ActiveScreen != null)
+                        m_ActiveScreen.StartDragging(); // follows the head; "upuść" or a pinch puts it down
+                    break;
+                case "upuść": case "zostaw": case "tutaj": case "drop":
+                    DropCarried();
+                    break;
                 case "pomoc": case "samouczek": case "help": case "tutorial":
                     OpenTutorial();
                     break;
@@ -1238,6 +1348,12 @@ namespace CardboardXR.Demos.Workspace
                 if (gesture == DynamicGesture.SwipeUp) media.Next(); else media.Previous();
             }
             else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
+                     m_ActiveScreen != null && m_ActiveScreen.GetComponent<FilmPlayer>() != null)
+            {
+                // Up: 30 s further, down: 30 s back
+                m_ActiveScreen.GetComponent<FilmPlayer>().Seek(gesture == DynamicGesture.SwipeUp ? 30.0 : -30.0);
+            }
+            else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
                      m_ActiveScreen != null && m_ActiveScreen.IsBrowser)
             {
                 // Hand up = page moves up = read further down
@@ -1308,22 +1424,36 @@ namespace CardboardXR.Demos.Workspace
             return true;
         }
 
-        void SelectNextScreen()
-        {
-            if (m_Screens.Count <= 1)
-                return;
-            int idx = m_Screens.IndexOf(m_ActiveScreen);
-            int nextIdx = (idx + 1) % m_Screens.Count;
-            SetActiveScreen(m_Screens[nextIdx]);
-        }
+        // Swipe right / "następny ekran": the window to the right of the active one (as seen from the head),
+        // wrapping round to the leftmost; swipe left the other way
+        void SelectNextScreen() => SelectScreenBeside(1);
+        void SelectPrevScreen() => SelectScreenBeside(-1);
 
-        void SelectPrevScreen()
+        void SelectScreenBeside(int direction)
         {
-            if (m_Screens.Count <= 1)
+            if (m_Screens.Count <= 1 || m_Core == null)
                 return;
-            int idx = m_Screens.IndexOf(m_ActiveScreen);
-            int prevIdx = (idx - 1 + m_Screens.Count) % m_Screens.Count;
-            SetActiveScreen(m_Screens[prevIdx]);
+            var from = m_ActiveScreen != null ? m_ActiveScreen : ScreenNearestGaze();
+            // Left to right as seen now (the seam behind the user), a stack from the top down
+            float headYaw = YawOf(m_Core.Head.forward);
+            var ordered = new List<VirtualScreen>();
+            foreach (var screen in m_Screens)
+            {
+                if (screen != null)
+                    ordered.Add(screen);
+            }
+            ordered.Sort((a, b) =>
+            {
+                Vector3 toA = a.transform.position - m_Core.Head.position, toB = b.transform.position - m_Core.Head.position;
+                float yawA = Mathf.DeltaAngle(headYaw, YawOf(toA)), yawB = Mathf.DeltaAngle(headYaw, YawOf(toB));
+                if (Mathf.Abs(yawA - yawB) > 10f)
+                    return yawA.CompareTo(yawB);
+                return PitchOf(toB).CompareTo(PitchOf(toA));
+            });
+            int index = ordered.IndexOf(from);
+            if (index < 0 || ordered.Count == 0)
+                return;
+            SetActiveScreen(ordered[(index + direction + ordered.Count) % ordered.Count]);
         }
 
         // Every window and the phone follow the head (each keeps its place in the view, like a single
@@ -1342,6 +1472,13 @@ namespace CardboardXR.Demos.Workspace
             {
                 if (on) m_PhoneScreen.StartDragging();
                 else m_PhoneScreen.StopDragging();
+            }
+            foreach (var widget in m_Widgets)
+            {
+                if (widget == null)
+                    continue;
+                if (on) widget.StartDragging();
+                else widget.StopDragging();
             }
             Debug.Log($"[Workspace] Gest pięści: przenoszenie całego układu {(on ? "start" : "koniec")}");
         }
@@ -1446,6 +1583,34 @@ namespace CardboardXR.Demos.Workspace
             // Something is being carried (started with its grab button): a pinch anywhere puts it down.
             // (A pinch on a button is routed to the button first, PinchRouter.Order, so this is a pinch
             // at the window itself or at the room.)
+            if (DropCarried())
+                return true;
+
+            if (gazeTarget == null)
+                return false;
+
+            // Pinching at a screen focuses it, so the keyboard and trackpad go to it. Let the pinch go on
+            // (false), so nothing else changes.
+            foreach (var screen in m_Screens)
+            {
+                if (screen != null && screen != m_ActiveScreen &&
+                    (gazeTarget.transform.IsChildOf(screen.transform) || gazeTarget == screen.gameObject))
+                {
+                    SetActiveScreen(screen);
+                    break;
+                }
+            }
+            return false;
+        }
+
+        // Puts down whatever is carried or being stretched (windows, the phone, widgets, the fist's group)
+        bool DropCarried()
+        {
+            if (m_GroupDrag)
+            {
+                SetGroupDrag(false);
+                return true;
+            }
             bool dropped = false;
             foreach (var screen in m_Screens)
             {
@@ -1474,24 +1639,7 @@ namespace CardboardXR.Demos.Workspace
                     dropped = true;
                 }
             }
-            if (dropped)
-                return true;
-
-            if (gazeTarget == null)
-                return false;
-
-            // Pinching at a screen focuses it, so the keyboard and trackpad go to it. Let the pinch go on
-            // (false), so nothing else changes.
-            foreach (var screen in m_Screens)
-            {
-                if (screen != null && screen != m_ActiveScreen &&
-                    (gazeTarget.transform.IsChildOf(screen.transform) || gazeTarget == screen.gameObject))
-                {
-                    SetActiveScreen(screen);
-                    break;
-                }
-            }
-            return false;
+            return dropped;
         }
 
         public void EndPinch()
