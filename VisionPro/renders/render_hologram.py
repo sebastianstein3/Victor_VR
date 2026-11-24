@@ -634,7 +634,7 @@ def draw_controls(overlay, camera):
     total = sum(widths) + spacing * (len(name) - 1)
     px = cx - total / 2
     for ch, w in zip(name, widths):
-        d.text((px, cy - 64 * ppd), ch, font=f, fill=(179, 242, 255, 255), anchor="lm")
+        d.text((px, cy - 64 * ppd), ch, font=f, fill=(179, 242, 255, 255), anchor="lm", stroke_width=int(0.7 * SS), stroke_fill=(179, 242, 255, 255))  # FontStyles.Bold
         px += w + spacing
     tonal, on_tonal = (74, 68, 88, 255), (232, 222, 248, 255)
     pill(-122, 64, 56, tonal, icon="stop", ink=on_tonal)
