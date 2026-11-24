@@ -83,17 +83,19 @@ namespace CardboardXR.Demos.Workspace
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Modele 3D", choices, empty);
         }
 
-        void PlaceModel(string path)
+        // at: a saved place (null: the surface looked at); yaw / scale: saved heading and size
+        void PlaceModel(string path, Vector3? at = null, float yaw = float.NaN, float scale = 1f)
         {
-            var point = ModelViewer.PlacementPoint(m_Core.Head);
+            var point = at ?? ModelViewer.PlacementPoint(m_Core.Head);
             var model = new GameObject("Model " + System.IO.Path.GetFileNameWithoutExtension(path)).AddComponent<ModelViewer>();
             model.transform.SetParent(transform, true);
-            model.Load(path, point, m_Core.Head);
+            model.Core = m_Core;
+            model.Load(path, point, m_Core.Head, yaw, scale);
             m_Models.Add(model);
             model.Closed += m => m_Models.Remove(m);
 
             // Its controls, beside it at about eye level
-            var controls = WidgetPanel.Create<ModelControls>(transform, m_Core.Head, new Vector2(360f, 130f),
+            var controls = WidgetPanel.Create<ModelControls>(transform, m_Core.Head, new Vector2(360f, 190f),
                 System.IO.Path.GetFileNameWithoutExtension(path), 0.9f);
             controls.Model = model;
             var right = Vector3.Cross(Vector3.up, Vector3.ProjectOnPlane(point - m_Core.Head.position, Vector3.up).normalized);
@@ -554,6 +556,16 @@ namespace CardboardXR.Demos.Workspace
             public bool pinned;
         }
 
+        // A 3D model: its file, and where it stands relative to the user's heading and head when saved
+        [Serializable]
+        class SavedModel
+        {
+            public string path;
+            public float x, y, z; // from the head, in the home heading's frame
+            public float yaw;     // relative to the home heading
+            public float scale = 1f;
+        }
+
         [Serializable]
         class SavedWidget
         {
@@ -566,6 +578,7 @@ namespace CardboardXR.Demos.Workspace
         {
             public List<SavedScreen> screens = new();
             public List<SavedWidget> widgets = new();
+            public List<SavedModel> models = new();
             public bool phone;
             public string locale;
             public string environment; // the place shown instead of the room (null: the room)
@@ -622,6 +635,17 @@ namespace CardboardXR.Demos.Workspace
                 if (widget != null && widget.Kind != "model" && widget.Kind != "rysowanie" && widget.Kind != "gra")
                     saved.widgets.Add(new SavedWidget { kind = widget.Kind, data = widget.SaveData });
             }
+            foreach (var model in m_Models)
+            {
+                if (model == null || string.IsNullOrEmpty(model.FilePath))
+                    continue;
+                var offset = Quaternion.Inverse(m_HomeYaw) * (model.transform.position - m_Core.Head.position);
+                saved.models.Add(new SavedModel
+                {
+                    path = model.FilePath, x = offset.x, y = offset.y, z = offset.z,
+                    yaw = Mathf.DeltaAngle(m_HomeYaw.eulerAngles.y, model.transform.eulerAngles.y), scale = model.Scale01,
+                });
+            }
             foreach (var screen in m_Screens)
             {
                 if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
@@ -655,7 +679,8 @@ namespace CardboardXR.Demos.Workspace
         bool RestoreWorkspace()
         {
             var saved = ReadWorkspace(SaveFile);
-            if (saved == null || ((saved.screens == null || saved.screens.Count == 0) && (saved.widgets == null || saved.widgets.Count == 0)))
+            if (saved == null || ((saved.screens == null || saved.screens.Count == 0) && (saved.widgets == null || saved.widgets.Count == 0) &&
+                                  (saved.models == null || saved.models.Count == 0)))
                 return false;
             ApplyWorkspace(saved);
             return true;
@@ -719,6 +744,16 @@ namespace CardboardXR.Demos.Workspace
             if (m_Environment != null && !string.IsNullOrEmpty(saved.environment) &&
                 (Array.IndexOf(EnvironmentSphere.BuiltIn, saved.environment) >= 0 || File.Exists(saved.environment)))
                 m_Environment.Show(saved.environment);
+            if (saved.models != null && ModelViewer.Available)
+            {
+                foreach (var item in saved.models)
+                {
+                    if (string.IsNullOrEmpty(item.path) || !File.Exists(item.path))
+                        continue;
+                    var position = m_Core.Head.position + m_HomeYaw * new Vector3(item.x, item.y, item.z);
+                    PlaceModel(item.path, position, item.yaw + m_HomeYaw.eulerAngles.y, item.scale);
+                }
+            }
             if (saved.widgets != null)
             {
                 foreach (var item in saved.widgets)
@@ -1762,7 +1797,7 @@ namespace CardboardXR.Demos.Workspace
             foreach (var model in m_Models)
             {
                 if (model != null)
-                    m_RoomAnchors.Keep(model.transform, false);
+                    m_RoomAnchors.Keep(model.transform, model.Carry != null && model.Carry.IsCarried);
             }
             if (m_Drawing != null && m_Drawing.StrokeCount > 0)
                 m_RoomAnchors.Keep(m_Drawing.transform, false);
@@ -1840,6 +1875,17 @@ namespace CardboardXR.Demos.Workspace
             if (DropCarried())
                 return true;
 
+            // A model: grab it with the fingers (6DoF) or let it follow the head (3DoF)
+            var grabbed = gazeTarget != null ? gazeTarget.GetComponentInParent<ModelViewer>() : null;
+            if (grabbed != null && grabbed.Carry != null)
+            {
+                bool hand = source == PinchSource.Hand && grabbed.Carry.CanHandCarry;
+                grabbed.Carry.BeginCarry(hand);
+                if (hand)
+                    m_GrabbedModel = grabbed; // let go when the fingers open
+                return true;
+            }
+
             // A board game's piece, field or dice
             var cell = gazeTarget != null ? gazeTarget.GetComponentInParent<GameCell>() : null;
             if (cell != null && cell.Game != null && cell.Game.BeginPinch(cell, source))
@@ -1915,13 +1961,28 @@ namespace CardboardXR.Demos.Workspace
                     dropped = true;
                 }
             }
+            foreach (var model in m_Models)
+            {
+                if (model != null && model.Carry != null && model.Carry.IsCarried)
+                {
+                    model.Carry.EndCarry();
+                    dropped = true;
+                }
+            }
             return dropped;
         }
 
         TableGame m_GamePinch;
+        ModelViewer m_GrabbedModel;
 
         public void EndPinch()
         {
+            if (m_GrabbedModel != null)
+            {
+                if (m_GrabbedModel.Carry != null)
+                    m_GrabbedModel.Carry.EndCarry();
+                m_GrabbedModel = null;
+            }
             if (m_GamePinch != null)
             {
                 m_GamePinch.EndPinch();
