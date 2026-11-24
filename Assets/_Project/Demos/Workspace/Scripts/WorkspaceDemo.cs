@@ -915,6 +915,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 new("Warcaby", () => StartGame<CheckersGame>()),
                 new("Chińczyk", () => StartGame<LudoGame>()),
+                new("Kółko i krzyżyk", () => StartGame<TicTacToeGame>()),
             };
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Gry na stole: spójrz na stół i wybierz", choices);
         }
@@ -925,6 +926,7 @@ namespace CardboardXR.Demos.Workspace
                 return;
             var game = new GameObject(typeof(T).Name).AddComponent<T>();
             game.transform.SetParent(transform, true);
+            game.Core = m_Core;
             game.Initialize(m_Core.Head);
             game.PlaceAtGaze();
             m_Games.Add(game);
@@ -941,7 +943,9 @@ namespace CardboardXR.Demos.Workspace
             controls.transform.SetPositionAndRotation(position, Quaternion.LookRotation(position - m_Core.Head.position, Vector3.up));
             m_Widgets.Add(controls);
             controls.Closed += w => m_Widgets.Remove(w);
-            ShowToast(typeof(T) == typeof(LudoGame) ? "Chińczyk: rzuć kostką na panelu" : "Warcaby: Ty grasz białymi");
+            ShowToast(typeof(T) == typeof(LudoGame) ? "Chińczyk: rzuć kostką na panelu"
+                : typeof(T) == typeof(TicTacToeGame) ? "Kółko i krzyżyk: narysuj krzyżyk w polu"
+                : "Warcaby: Ty grasz białymi");
         }
 
         // ---- The iPhone's Photos library (one gallery window at a time: it shares the native list) ----
@@ -1371,6 +1375,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "chińczyk": case "ludo":
                     StartGame<LudoGame>();
+                    break;
+                case "kółko i krzyżyk": case "kółko krzyżyk": case "krzyżyk": case "tic tac toe":
+                    StartGame<TicTacToeGame>();
                     break;
                 case "rzuć": case "rzuć kostką": case "kostka": case "roll":
                     foreach (var game in m_Games)
@@ -1835,9 +1842,9 @@ namespace CardboardXR.Demos.Workspace
 
             // A board game's piece, field or dice
             var cell = gazeTarget != null ? gazeTarget.GetComponentInParent<GameCell>() : null;
-            if (cell != null && cell.Game != null)
+            if (cell != null && cell.Game != null && cell.Game.BeginPinch(cell, source))
             {
-                cell.Game.Pick(cell);
+                m_GamePinch = cell.Game;
                 return true;
             }
 
@@ -1911,8 +1918,15 @@ namespace CardboardXR.Demos.Workspace
             return dropped;
         }
 
+        TableGame m_GamePinch;
+
         public void EndPinch()
         {
+            if (m_GamePinch != null)
+            {
+                m_GamePinch.EndPinch();
+                m_GamePinch = null;
+            }
             if (m_DrawingPinch)
             {
                 m_DrawingPinch = false;

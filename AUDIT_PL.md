@@ -310,8 +310,15 @@ przycisków 148 dp w menu 3 × 3, pauza przywróconego filmu na pierwszej klatce
 - **Zrzut ekranu**: lewa połowa ekranu (lewe oko, z ewentualnym zniekształceniem soczewek) do Zdjęć.
 - **Rysowanie** (`SpaceDrawing.cs`): `PaintStroke` z dema Paint (asmdef Workspace odwołuje się do
   `CardboardXR.Demos.Paint`), jedna kotwica dla wszystkich kresek, wymaga dłoni 6DoF.
-- **Gry** (`TableGame.cs`, `CheckersGame.cs`, `LudoGame.cs`): plansze z prymitywów URP Lit na wykrytym stole,
-  wybór wzrokiem + uszczypnięcie (`GameCell`), warcaby z alfa-beta (głębokość 4), chińczyk z heurystyką.
+- **Gry** (`TableGame.cs`, `CheckersGame.cs`, `LudoGame.cs`, `TicTacToeGame.cs`): plansze z prymitywów URP Lit
+  na wykrytym stole, wybór wzrokiem + uszczypnięcie (`GameCell`), warcaby z alfa-beta (głębokość 4), chińczyk
+  z heurystyką. **Kółko i krzyżyk** używa rysowania w przestrzeni: siatka, znaki i linia wygranej to kreski
+  `SpaceDrawing` (własna instancja pod planszą, więc ruszają się z nią); kreska narysowana ręką nad polem
+  (środek kreski → pole, wysokość bez znaczenia) jest zastępowana równym krzyżykiem, komputer rysuje kółko
+  animacją; negamax (poziom łatwy myli się w ~30% ruchów). `SpaceDrawing` dostał zdarzenie `StrokeEnded`
+  (kreska + punkty świata), `CreateStroke` i `Remove`; `TableGame` – `BeginPinch`/`EndPinch`/`Core`.
+  Nie testowane: czy środek kreski rysowanej w powietrzu trafia w dobre pole (wysokość i paralaksa),
+  czy wzrok trafia w pola (0,7 cm wysokości collidera) i czy tusz widać z ukosa na stole.
 
 Nie testowane na urządzeniu: wydajność syntezy miniatur (synchroniczna, 8 na stronę), orientacja miniatur
 (rysowanie przez UIKit), filtr przestrzennych w predykacie PhotoKit, przerwy w klatkach przy ruchu komputera

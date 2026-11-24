@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using CardboardXR.Demos;
+using CardboardXR.Hands;
 using CardboardXR.UI;
 using TMPro;
 using UnityEngine;
@@ -23,6 +25,9 @@ namespace CardboardXR.Demos.Workspace
         public virtual void Action() { }
 
         protected Transform m_Head;
+
+        // The core services (hand tracking), set by WorkspaceDemo before Initialize
+        public CoreServices Core { get; set; }
         readonly Dictionary<Color, Material> m_Materials = new();
         Shader m_Shader;
         string m_Status = "";
@@ -53,6 +58,16 @@ namespace CardboardXR.Demos.Workspace
 
         // A pinch with the gaze on one of this game's colliders
         public abstract void Pick(GameCell cell);
+
+        // The pinch began on a collider of this game: true to take it. By default it picks the piece or
+        // field; a game that draws with the hand (tic-tac-toe) starts a stroke instead. EndPinch: it opened.
+        public virtual bool BeginPinch(GameCell cell, PinchSource source)
+        {
+            Pick(cell);
+            return true;
+        }
+
+        public virtual void EndPinch() { }
 
         protected void SetStatus(string status)
         {

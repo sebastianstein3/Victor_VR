@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CardboardXR.Demos.Paint;
 using CardboardXR.Hands;
@@ -36,6 +37,11 @@ namespace CardboardXR.Demos.Workspace
         public int WidthIndex { get; set; } = 1;
         public int StrokeCount => m_Strokes.Count;
 
+        // A hand-drawn stroke was finished and kept: the stroke and the fingertip's points, in world space
+        // (the tic-tac-toe game reads where it was drawn)
+        public event Action<PaintStroke, List<Vector3>> StrokeEnded;
+        readonly List<Vector3> m_CurrentPoints = new();
+
         public void Initialize(CoreServices core)
         {
             m_Core = core;
@@ -63,7 +69,36 @@ namespace CardboardXR.Demos.Workspace
             {
                 m_Strokes.Remove(stroke);
                 Destroy(stroke.gameObject);
+                m_CurrentPoints.Clear();
+                return;
             }
+            var points = new List<Vector3>(m_CurrentPoints);
+            m_CurrentPoints.Clear();
+            StrokeEnded?.Invoke(stroke, points);
+        }
+
+        // A stroke drawn by code (the game's grid, marks and winning line): points are added with Add,
+        // at world positions; it is cleaned up with the rest (Clear) or by Remove
+        public PaintStroke CreateStroke(Color color, float width)
+        {
+            if (m_Material == null)
+                return null;
+            var strokeObject = new GameObject($"Stroke {m_Strokes.Count + 1}", typeof(MeshFilter), typeof(MeshRenderer));
+            strokeObject.transform.SetParent(transform, false);
+            var stroke = strokeObject.AddComponent<PaintStroke>();
+            stroke.Begin(BrushStyle.Ink, width, color, m_Material);
+            m_Strokes.Add(stroke);
+            return stroke;
+        }
+
+        public void Remove(PaintStroke stroke)
+        {
+            if (stroke == null)
+                return;
+            if (stroke == m_Current)
+                m_Current = null;
+            m_Strokes.Remove(stroke);
+            Destroy(stroke.gameObject);
         }
 
         void StartStroke(Vector3 start)
@@ -75,6 +110,8 @@ namespace CardboardXR.Demos.Workspace
             stroke.Add(start, TowardViewer(start));
             m_Strokes.Add(stroke);
             m_Current = stroke;
+            m_CurrentPoints.Clear();
+            m_CurrentPoints.Add(start);
         }
 
         public void Undo()
@@ -126,6 +163,7 @@ namespace CardboardXR.Demos.Workspace
                 StartStroke(tip);
             }
             m_Current.Add(tip, TowardViewer(tip));
+            m_CurrentPoints.Add(tip);
             if (m_Current.IsFull)
                 StartStroke(m_Current.LastPoint);
         }
