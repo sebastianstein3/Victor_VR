@@ -1,4 +1,4 @@
-"""Renders of the Jarvis hologram (HologramAssistant.cs) as seen in the headset.
+"""Renders of the V.I.C.T.O.R. hologram (HologramAssistant.cs) as seen in the headset.
 
 The geometry is the code's, number for number: the projector base with its three turning segmented rings
 and the radar sweep, the beam, the globe's meridians and parallels, the web of filaments and nodes inside
@@ -594,12 +594,12 @@ def font(size_px, name="Roboto-Medium.ttf"):
         return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(6, int(size_px)))
 
 
-ICONS = {"stop": 0xe047, "close": 0xe5cd, "pinch": 0xeb38, "open_with": 0xe89f}
+ICONS = {"stop": 0xe047, "close": 0xe5cd, "pinch": 0xeb38, "open_with": 0xe89f, "auto_awesome": 0xe65f, "edit": 0xe3c9}
 
 
 def draw_controls(overlay, camera):
     d = ImageDraw.Draw(overlay, "RGBA")
-    centre = np.array([0, 0.07, -(BASE_R * SCALE + 0.17)])  # HologramAssistant.LateUpdate
+    centre = np.array([0, 0.10, -(BASE_R * SCALE + 0.17)])  # HologramAssistant.LateUpdate
     x, y, z = camera.project(centre, ss=SS)
     ppd = F * SS * DP * CONTROLS_SCALE / z[0]
     cx, cy = x[0], y[0]
@@ -626,21 +626,23 @@ def draw_controls(overlay, camera):
         else:
             d.text((mx, my), text, font=ft, fill=ink, anchor="mm")
 
-    # the name, letter-spaced (characterSpacing 14: 14% of the font size)
+    # the name, letter-spaced (characterSpacing 6: 6% of the font size)
     f = font(22 * ppd)
-    name = "JARVIS"
-    spacing = 0.14 * 22 * ppd
+    name = "V.I.C.T.O.R."
+    spacing = 0.06 * 22 * ppd
     widths = [d.textlength(ch, font=f) for ch in name]
     total = sum(widths) + spacing * (len(name) - 1)
     px = cx - total / 2
     for ch, w in zip(name, widths):
-        d.text((px, cy - 30 * ppd), ch, font=f, fill=(179, 242, 255, 255), anchor="lm")
+        d.text((px, cy - 64 * ppd), ch, font=f, fill=(179, 242, 255, 255), anchor="lm")
         px += w + spacing
     tonal, on_tonal = (74, 68, 88, 255), (232, 222, 248, 255)
-    pill(-122, 30, 56, tonal, icon="stop", ink=on_tonal)
-    pill(122, 30, 56, tonal, icon="close", ink=on_tonal)
-    pill(-80, -30, 150, (208, 188, 255, 255), text="Zapytaj", icon="pinch")
-    pill(80, -30, 150, tonal, text="Na blat", icon="open_with", ink=on_tonal)
+    pill(-122, 64, 56, tonal, icon="stop", ink=on_tonal)
+    pill(122, 64, 56, tonal, icon="close", ink=on_tonal)
+    pill(-80, 4, 150, (208, 188, 255, 255), text="Zapytaj", icon="pinch")
+    pill(80, 4, 150, tonal, text="Na blat", icon="open_with", ink=on_tonal)
+    pill(-80, -56, 150, tonal, text="Model", icon="auto_awesome", ink=on_tonal)
+    pill(80, -56, 150, tonal, text="Pamięć", icon="edit", ink=on_tonal)
 
 
 def draw_hud(overlay, camera, state, fps=59, memory=0.38, battery=0.82, uptime="00:42:17",
@@ -651,7 +653,7 @@ def draw_hud(overlay, camera, state, fps=59, memory=0.38, battery=0.82, uptime="
     x, y, z = camera.project(centre, ss=SS)
     ppd = F * SS * DP * CONTROLS_SCALE / z[0]
     cx, cy = x[0], y[0]
-    pw, ph = 300.0, 410.0
+    pw, ph = 300.0, 440.0
     cyan, orange = (64, 217, 255), (255, 140, 38)
     dim, bright = (140, 179, 199), (209, 242, 255)
 
@@ -696,7 +698,7 @@ def draw_hud(overlay, camera, state, fps=59, memory=0.38, battery=0.82, uptime="
 
     section("SYSTEMY", top - 28, "NA ŻYWO")
     row("FPS", top - 62, fps / 60.0, str(fps), fps < 40)
-    row("PAMIĘĆ", top - 92, memory, f"{memory * 100:.0f}%", memory > 0.5)
+    row("RAM", top - 92, memory, f"{memory * 100:.0f}%", memory > 0.5)
     row("BATERIA", top - 122, battery, f"{battery * 100:.0f}%", battery < 0.2)
     section("SIEĆ", top - 160)
     text(f"OSTATNIA ODPOWIEDŹ  {latencies[-1]:.1f} s", left + 28, top - 184, "left", dim)
@@ -710,7 +712,8 @@ def draw_hud(overlay, camera, state, fps=59, memory=0.38, battery=0.82, uptime="
     section("STATUS", top - 262)
     names = {"idle": "SPOCZYNEK", "listening": "SŁUCHAM", "thinking": "MYŚLĘ", "speaking": "MÓWIĘ"}
     for yc, label, value in ((top - 292, "STAN", names[state]), (top - 318, "MODEL", "CLAUDE OPUS 5.5"),
-                             (top - 344, "GŁOS", "PL-PL"), (top - 370, "CZAS PRACY", uptime)):
+                             (top - 344, "GŁOS", "PL-PL"), (top - 370, "CZAS PRACY", uptime),
+                             (top - 396, "NOTATKI", "412 ZN.")):
         text(label, left + 22, yc, "left", dim)
         text(value, pw / 2 - 16, yc, "right", bright)
 
@@ -792,8 +795,8 @@ if __name__ == "__main__":
 
     # 1. The desk, the hologram speaking: the whole frame of one eye, cropped top and bottom
     hero = images["speaking"].crop((0, 150, W, 1040))
-    label(hero, "Jarvis na biurku, mówi (jedno oko, 1311 x 890 px)")
-    hero.save(f"{OUT}/10_jarvis_na_biurku.png")
+    label(hero, "V.I.C.T.O.R. na biurku, mówi (jedno oko, 1311 x 890 px)")
+    hero.save(f"{OUT}/10_victor_na_biurku.png")
 
     # 2. The four states side by side
     box = (180, 180, 1130, 940)
@@ -807,9 +810,9 @@ if __name__ == "__main__":
     sheet = Image.new("RGB", (tw * 2 + 6, th * 2 + 6), (0, 0, 0))
     for i, tile in enumerate(tiles):
         sheet.paste(tile, ((i % 2) * (tw + 6), (i // 2) * (th + 6)))
-    sheet.save(f"{OUT}/11_jarvis_stany.png")
+    sheet.save(f"{OUT}/11_victor_stany.png")
 
     # 3. A closer look at the globe, enlarged 3x (the pixels are the phone's: this is a zoom, not more detail)
     zoom = images["speaking"].crop((490, 355, 820, 685)).resize((1122, 1122), Image.LANCZOS)
     label(zoom, "Zbliżenie 3x (mówi)")
-    zoom.save(f"{OUT}/12_jarvis_zblizenie.png")
+    zoom.save(f"{OUT}/12_victor_zblizenie.png")

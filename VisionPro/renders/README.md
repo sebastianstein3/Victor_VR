@@ -13,14 +13,14 @@ To przybliżenie: bez zniekształcenia soczewek, bez obrazu z kamery, treść ok
 | `5_ekran_iphone_stereo.png` | Co wyświetla iPhone: osobny obraz dla każdego oka (63 mm rozstawu) |
 | `6_rozciagniete_okno.png` | Przeglądarka rozciągnięta za uchwyt w rogu do 1000 × 640 dp (strona ułożona pod nowy rozmiar) |
 
-Hologram Jarvisa (`render_hologram.py`, liczy tę samą geometrię co `HologramAssistant.cs` i rysuje ją addytywnie
+Hologram V.I.C.T.O.R.-a (`render_hologram.py`, liczy tę samą geometrię co `HologramAssistant.cs` i rysuje ją addytywnie
 jak `Hologram.shader`, w rozdzielczości jednego oka iPhone'a, 1311 × 1206 px; pokój jest zastępczy):
 
 | Plik | Co pokazuje |
 |---|---|
-| `10_jarvis_na_biurku.png` | Hologram na biurku, mówi: szklana planeta z rozżarzonym rdzeniem w środku (jak na konsoli Jarvisa), na zewnątrz złote halo z fragmentów, komety, tarcza ze skalą i złota podstawa z radarem, „podłogą” z fragmentów i equalizerem; napisy, przyciski i panel statusu |
-| `11_jarvis_stany.png` | Cztery stany: spoczynek, słucha (halo się zacieśnia), myśli (głęboki bursztyn), mówi |
-| `12_jarvis_zblizenie.png` | Zbliżenie 3× (powiększone piksele, nie dodatkowe szczegóły) |
+| `10_victor_na_biurku.png` | Hologram na biurku, mówi: szklana planeta z rozżarzonym rdzeniem w środku (jak na konsoli Jarvisa), na zewnątrz złote halo z fragmentów, komety, tarcza ze skalą i złota podstawa z radarem, „podłogą” z fragmentów i equalizerem; napisy, przyciski (Zapytaj, Na blat, Model, Pamięć) i panel statusu |
+| `11_victor_stany.png` | Cztery stany: spoczynek, słucha (halo się zacieśnia), myśli (głęboki bursztyn), mówi |
+| `12_victor_zblizenie.png` | Zbliżenie 3× (powiększone piksele, nie dodatkowe szczegóły) |
 
 Uruchomienie: `python render_hologram.py <folder projektu Unity> <folder wyjściowy>`. Niewidoczne na zdjęciach:
 ruch (pierścienie, sweep i paczki światła w włóknach się poruszają), prawdziwy pokój i dokładna odpowiedź kolorów
