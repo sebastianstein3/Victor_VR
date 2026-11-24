@@ -57,11 +57,23 @@ namespace CardboardXR.Demos.Workspace
         // Where to put a model: the surface under the gaze (within 3 m), or in front at hand height
         public static Vector3 PlacementPoint(Transform head)
         {
+            TryFindSurface(head, out var point);
+            return point;
+        }
+
+        // The detected horizontal surface under the gaze (within 3 m) as true, else false and a point in
+        // front of the user at hand height
+        public static bool TryFindSurface(Transform head, out Vector3 point)
+        {
             if (Physics.Raycast(head.position, head.forward, out var hit, 3f, 1 << k_SurfaceLayer, QueryTriggerInteraction.Ignore) &&
                 hit.normal.y > 0.9f)
-                return hit.point;
+            {
+                point = hit.point;
+                return true;
+            }
             var flat = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
-            return head.position + flat * 0.8f - Vector3.up * 0.3f;
+            point = head.position + flat * 0.8f - Vector3.up * 0.3f;
+            return false;
         }
 
         // yaw: a saved heading in degrees (NaN: facing the user); scale: a saved size factor

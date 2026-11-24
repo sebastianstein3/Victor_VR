@@ -36,6 +36,7 @@ namespace CardboardXR.Demos.Workspace
 
         public Carryable Carry { get; private set; }
         public event Action<HologramAssistant> Closed;
+        public event Action<HologramAssistant> PlaceRequested; // "Na blat": stand on the surface looked at
 
         class Ring
         {
@@ -419,12 +420,14 @@ namespace CardboardXR.Demos.Workspace
         void BuildPanels()
         {
             m_Controls = WorldUi.Panel("Hologram Controls", transform, new Vector2(330f, 130f), 1.0f, new Color(0f, 0f, 0f, 0f), 20f);
-            var name = M3.Text("HologramName", m_Controls, DisplayName, M3Theme.Type.TitleLarge, new Vector2(0f, 30f), new Vector2(300f, 40f),
+            // Top row: stop, the name, close. Bottom row: Zapytaj, Na blat
+            var name = M3.Text("HologramName", m_Controls, DisplayName, M3Theme.Type.TitleLarge, new Vector2(0f, 30f), new Vector2(170f, 40f),
                 new Color(0.7f, 0.95f, 1f));
             name.characterSpacing = 14f;
-            M3.Button("HologramAsk", m_Controls, "Zapytaj", M3Button.Variant.Filled, new Vector2(-82f, -28f), () => m_Session.Listen(), "pinch", 140f);
-            M3.IconButton("HologramStop", m_Controls, "stop", M3Button.Variant.Tonal, new Vector2(28f, -28f), () => m_Session.StopSpeaking(), 56f);
-            M3.IconButton("HologramClose", m_Controls, "close", M3Button.Variant.Tonal, new Vector2(92f, -28f), Close, 56f);
+            M3.IconButton("HologramStop", m_Controls, "stop", M3Button.Variant.Tonal, new Vector2(-122f, 30f), () => m_Session.StopSpeaking(), 56f);
+            M3.IconButton("HologramClose", m_Controls, "close", M3Button.Variant.Tonal, new Vector2(122f, 30f), Close, 56f);
+            M3.Button("HologramAsk", m_Controls, "Zapytaj", M3Button.Variant.Filled, new Vector2(-80f, -30f), () => m_Session.Listen(), "pinch", 150f);
+            M3.Button("HologramDesk", m_Controls, "Na blat", M3Button.Variant.Tonal, new Vector2(80f, -30f), () => PlaceRequested?.Invoke(this), "open_with", 150f);
             WorkspaceSounds.Attach(m_Controls);
 
             m_Subtitles = WorldUi.Panel("Hologram Subtitles", transform, new Vector2(460f, 70f), 1.0f, new Color(0f, 0f, 0f, 0f), 16f);

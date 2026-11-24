@@ -978,6 +978,21 @@ namespace CardboardXR.Demos.Workspace
                 CreateHologram(null);
         }
 
+        // "Na blat": the hologram stands on the surface looked at, a desk (15-95 cm below the eyes) or the floor
+        void PlaceHologramOnDesk()
+        {
+            if (m_Hologram == null || m_Core == null)
+                return;
+            m_Hologram.Carry.EndCarry();
+            if (m_RoomAnchors != null)
+                m_RoomAnchors.Release(m_Hologram.transform);
+            bool found = ModelViewer.TryFindSurface(m_Core.Head, out var point);
+            m_Hologram.transform.position = point;
+            float below = m_Core.Head.position.y - point.y;
+            ShowToast(!found ? "Nie widzę blatu: spójrz na stół i poczekaj, aż się wykryje"
+                : below >= k_DeskMinBelowEyes && below <= k_DeskMaxBelowEyes ? "Hologram stoi na blacie" : "Hologram stoi na podłodze");
+        }
+
         // at: a saved place (null: the surface looked at)
         void CreateHologram(Vector3? at)
         {
@@ -995,6 +1010,7 @@ namespace CardboardXR.Demos.Workspace
             go.transform.position = at ?? ModelViewer.PlacementPoint(m_Core.Head);
             m_Hologram = hologram;
             hologram.Closed += h => { if (m_Hologram == h) m_Hologram = null; };
+            hologram.PlaceRequested += _ => PlaceHologramOnDesk();
             if (at == null)
                 ShowToast("Hologram: „Zapytaj” albo powiedz „Jarvis, …”. Uszczypnij go, aby przenieść");
         }
@@ -1387,6 +1403,16 @@ namespace CardboardXR.Demos.Workspace
                 return true;
             // "zapytaj …", "Jarvis, …": a question for the assistant from anywhere. With the hologram out the
             // answer comes from it, else the assistant's window opens.
+            // "hologram na blat": it stands on the desk looked at (and is made first if it isn't out yet)
+            if (Array.IndexOf(new[] { "hologram na blat", "hologram na biurko", "hologram na stół", "jarvis na blat", "jarvis na biurko",
+                    "jarvis na stół" }, command) >= 0)
+            {
+                if (m_Hologram == null)
+                    ToggleHologram();
+                else
+                    PlaceHologramOnDesk();
+                return true;
+            }
             string phrase = command.Replace(",", "");
             foreach (var prefix in new[] { "zapytaj ", "jarvis ", "asystencie ", "asystent ", "hej claude ", "claude " })
             {
