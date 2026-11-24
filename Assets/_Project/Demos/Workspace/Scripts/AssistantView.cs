@@ -18,7 +18,7 @@ namespace CardboardXR.Demos.Workspace
     //
     // The API key: put it in a file "klucz_ai.txt" in the app's Documents folder (Finder or the Files
     // app). On the next open the app moves it into the iOS Keychain and deletes the file; it is never
-    // stored anywhere else, logged, or shown. "Usuń klucz" removes it from the Keychain.
+    // stored anywhere else, logged, or shown. Saying "usuń klucz" removes it from the Keychain.
     //
     // The conversation is sent whole each time, assistant turns exactly as the API returned them
     // (thinking blocks included, as the API requires), and never edited; "Nowa rozmowa" starts over.

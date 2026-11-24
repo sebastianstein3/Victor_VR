@@ -294,3 +294,26 @@ formaty, których VideoPlayer na iOS nie odtwarza (np. .mkv, AV1).
 
 Nie testowane na urządzeniu: progi nakładania (−1° dla sąsiednich slotów, 2° dla widżetów), czytelność
 przycisków 148 dp w menu 3 × 3, pauza przywróconego filmu na pierwszej klatce.
+
+### 6c. Galeria, asystent AI, układy, zrzut ekranu, rysowanie, gry
+- **Galeria** (`GalleryView.cs`, `CardboardXRPhotos.mm`): biblioteka Zdjęć bez kopiowania, miniatury 4 × 2,
+  filtr Wszystkie / Przestrzenne (iOS 18+, `PHAssetMediaSubtypeSpatialMedia`) / Filmy; oryginał zapisywany do
+  `tmp/Galeria` (z iCloud, jeśli trzeba) i otwierany w `SpatialMediaView` albo `FilmPlayer`.
+- **Asystent AI** (`AssistantView.cs`, `CardboardXRAssistant.mm`): Messages API przez `UnityWebRequest`
+  (oficjalne SDK C# nie jest przeznaczone dla IL2CPP/iOS), `claude-opus-5-5`, `anthropic-version: 2026-10-21`,
+  `output_config.effort: low`, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), obsługa
+  `stop_reason: refusal` i `max_tokens`, ponowienie przy 429/5xx/529. Odpowiedzi asystenta odsyłane bez zmian
+  (bloki thinking i fallback), historia tylko dopisywana; po 40 wymianach nowa rozmowa. Klucz: plik
+  `klucz_ai.txt` → pęk kluczy (ThisDeviceOnly), plik usuwany; „usuń klucz” kasuje. Rozmowy nie są zapisywane.
+- **Układy** (`WorkspaceLayouts.cs`): Praca / Kino / Czytanie / Własny w `Documents/Uklady/*.json`
+  (zapis układu rozbity na Capture/Write/Read/Apply); otwarcie zamyka okna, widżety i modele.
+- **Zrzut ekranu**: lewa połowa ekranu (lewe oko, z ewentualnym zniekształceniem soczewek) do Zdjęć.
+- **Rysowanie** (`SpaceDrawing.cs`): `PaintStroke` z dema Paint (asmdef Workspace odwołuje się do
+  `CardboardXR.Demos.Paint`), jedna kotwica dla wszystkich kresek, wymaga dłoni 6DoF.
+- **Gry** (`TableGame.cs`, `CheckersGame.cs`, `LudoGame.cs`): plansze z prymitywów URP Lit na wykrytym stole,
+  wybór wzrokiem + uszczypnięcie (`GameCell`), warcaby z alfa-beta (głębokość 4), chińczyk z heurystyką.
+
+Nie testowane na urządzeniu: wydajność syntezy miniatur (synchroniczna, 8 na stronę), orientacja miniatur
+(rysowanie przez UIKit), filtr przestrzennych w predykacie PhotoKit, przerwy w klatkach przy ruchu komputera
+w warcabach, trafianie wzrokiem w małe pionki chińczyka (1,8 cm), kolejność sesji audio przy czytaniu odpowiedzi
+po dyktowaniu, koszt asystenta (płatne API).

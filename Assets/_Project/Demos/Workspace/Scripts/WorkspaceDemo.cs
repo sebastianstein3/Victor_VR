@@ -1353,6 +1353,10 @@ namespace CardboardXR.Demos.Workspace
                 case "widżety": case "widgets":
                     OpenWidgetMenu();
                     break;
+                case "usuń klucz": case "usuń klucz ai": case "delete key":
+                    AssistantView.DeleteKey();
+                    ShowToast("Klucz asystenta usunięty z pęku kluczy");
+                    break;
                 case "asystent": case "asystent ai": case "claude": case "assistant":
                     OpenAssistant();
                     break;

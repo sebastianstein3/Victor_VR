@@ -125,9 +125,9 @@ działający na iPhonie, wyświetlany jako okno w VR.
 
 ## Narzędzia z menu Więcej
 
-Przycisk **Więcej** w docku (albo głos „więcej”) otwiera menu: Napisy,
-Widżety (Zegar, Minutnik, Notatka, Pogoda, Kalendarz), PDF, Filmy, Zdjęcia 3D, Środowisko, Modele 3D,
-Pliki, Samouczek – jedna strona 3 × 3. Drugie naciśnięcie **Więcej** zamyka menu.
+Przycisk **Więcej** w docku (albo głos „więcej”) otwiera menu (dwie strony 3 × 3): Asystent, Galeria, Filmy,
+Widżety (Zegar, Minutnik, Notatka, Pogoda, Kalendarz), Napisy, Układy, Gry, Rysowanie, PDF, Zdjęcia 3D,
+Środowisko, Modele 3D, Pliki, Zrzut ekranu, Samouczek. Drugie naciśnięcie **Więcej** zamyka menu.
 
 | Narzędzie | Co robi | Pliki i głos |
 |---|---|---|
@@ -141,6 +141,12 @@ Pliki, Samouczek – jedna strona 3 × 3. Drugie naciśnięcie **Więcej** zamyk
 | Modele 3D | .glb/.gltf stawiane na prawdziwej powierzchni, na którą patrzysz; panel -30° / +30° / - / + obraca i skaluje. Wymaga pakietu `com.unity.cloud.gltfast` w buildzie | folder `Modele`; „modele” |
 | Zdjęcia 3D | Zdjęcia przestrzenne HEIC i filmy przestrzenne MV-HEVC z iPhone'a 15 Pro / 16 Pro (filmy: iOS 17+), obrazy obok siebie .jpg/.png z `_sbs` w nazwie, inne obrazy płasko. Każde oko widzi swój obraz. Dalej/wstecz: przyciski w stopce, gest góra/dół, „następne” / „poprzednie” | folder `Przestrzenne`; „zdjęcia 3d” |
 | Filmy | Twoje filmy .mp4/.mov/.m4v (H.264 lub HEVC) w oknie: -10 s, pauza, +10 s, następny, **Kino** (przyciemnia pokój i pokazuje film na dużym ekranie kinowym). Okno można rozciągnąć | folder `Filmy`; „filmy”, „pauza” / „odtwórz”, „następne” |
+| Asystent AI | Pytasz głosem („Zapytaj”, albo mów, gdy okno asystenta jest aktywne) lub piszesz i naciskasz Enter; odpowiada Claude, a odpowiedź jest czytana w AirPods (przycisk **Głos** wyłącza czytanie). **Klucz:** plik `klucz_ai.txt` z kluczem z console.anthropic.com w folderze aplikacji – przy otwarciu trafia do pęku kluczy iPhone'a, a plik jest usuwany. Płatne wg cennika Anthropic | „asystent”, „zapytaj …” z każdego miejsca, „usuń klucz” |
+| Galeria | Zdjęcia i filmy z aplikacji Zdjęcia, bez kopiowania: miniatury, filtr Wszystkie / Przestrzenne (iOS 18+) / Filmy, strony gestem góra/dół. Uszczypnięcie otwiera oryginał (z iCloud, jeśli trzeba) w nowym oknie: zdjęcia i przestrzenne w 3D, filmy w odtwarzaczu | „galeria” |
+| Układy | Zapis i otwieranie zestawów okien, widżetów, środowiska i trybu kina: Praca, Kino, Czytanie, Własny. Otwarcie zamyka obecne okna i ustawia układ przed Tobą | „układ praca”, „zapisz układ kino” |
+| Gry | Warcaby (Ty białymi, zasady polskie: bicie obowiązkowe i najdłuższe, damki dalekiego zasięgu) i chińczyk (Ty czerwonym, 3 graczy komputerowych). Plansza staje na stole, na który patrzysz; ruch: spójrz na pionek i uszczypnij, potem na pole. Panel obok: Nowa gra, kostka, Na stół | „warcaby”, „chińczyk”, „rzuć” |
+| Rysowanie | Uszczypnij w powietrzu i rysuj (6 kolorów, 3 grubości, Cofnij, Wyczyść – dwa razy). Rysunki zostają w pokoju po zamknięciu panelu. Wymaga śledzenia dłoni 6DoF | „rysuj”, „cofnij” |
+| Zrzut ekranu | Zapisuje widok lewego oka w aplikacji Zdjęcia (zgoda na dodawanie) | „zrzut ekranu” |
 | Pliki (iCloud) | Kopiuje pliki z iCloud Drive (i innych miejsc z aplikacji Pliki) do właściwych folderów aplikacji – bez Findera. Patrz niżej | „pliki” |
 
 **Jak wgrać pliki:** na Macu Finder > iPhone > Pliki > CardboardXR, przeciągnij pliki do właściwego folderu

@@ -55,13 +55,21 @@ Nic z tego nie było kompilowane ani uruchamiane (patrz `AUDIT_PL.md`, sekcja �
   `Widgets.cs` (Zegar, Minutnik, Notatka, Pogoda, Kalendarz; zapis w `workspace.json`), `PdfView.cs`,
   `EnvironmentSphere.cs` (środowiska 360), `ModelViewer.cs` (modele 3D), `SpatialMediaView.cs`
   (zdjęcia i filmy przestrzenne), `FilmPlayer.cs` (filmy, ekran kinowy), `FileImport.cs` (Pliki: import z
-  iCloud / okna wyboru plików). Otwiera je przycisk „Więcej” w docku; głosem: napisy, zegar, minutnik,
-  notatka, pogoda, kalendarz, pdf, środowisko / pokój, modele, zdjęcia 3d, filmy, pauza, pliki
+  iCloud / okna wyboru plików), `GalleryView.cs` (galeria Zdjęć), `AssistantView.cs` (asystent AI, Claude
+  Messages API przez `UnityWebRequest`, `claude-opus-5-5`, `anthropic-version: 2026-10-21`), `SpaceDrawing.cs`
+  (rysowanie, pędzle z dema Paint), `TableGame.cs` + `CheckersGame.cs` + `LudoGame.cs` (gry na stole),
+  `WorkspaceLayouts.cs` (układy, zrzut ekranu, toast), `WorkspaceLayout.cs` (gdzie pojawiają się okna i
+  widżety). Otwiera je przycisk „Więcej” w docku; głosem: napisy, zegar, minutnik, notatka, pogoda,
+  kalendarz, pdf, środowisko / pokój, modele, zdjęcia 3d, filmy, pauza, pliki, galeria, asystent,
+  „zapytaj …”, układy, „układ praca”, gry, warcaby, chińczyk, rzuć, rysuj, cofnij, zrzut ekranu
   (`WorkspaceDemo.TryVoiceCommand`).
 - **Wtyczki natywne** (`Assets/Plugins/iOS/`): `CardboardXRTranslate.swift` (Translation, iOS 26.4+, języki
   pobiera się w Ustawieniach iOS), `CardboardXRPdf.mm` (PDFKit), `CardboardXRCalendar.mm` (EventKit),
   `CardboardXRSpatial.swift` (HEIC przestrzenne i MV-HEVC, filmy od iOS 17), `CardboardXRFiles.mm`
-  (UIDocumentPicker, zakładka połączonego folderu, kopiowanie do folderów wg rodzaju). Frameworki, uprawnienia
+  (UIDocumentPicker, zakładka połączonego folderu, kopiowanie do folderów wg rodzaju), `CardboardXRPhotos.mm`
+  (PhotoKit: galeria, zrzuty), `CardboardXRAssistant.mm` (klucz API w pęku kluczy, czytanie na głos).
+  Klucz asystenta: plik `Documents/klucz_ai.txt` jest jednorazowo przenoszony do pęku kluczy i usuwany –
+  nigdy nie loguj, nie zapisuj ani nie commituj kluczy. Frameworki, uprawnienia
   (kalendarz, mowa, sieć lokalna) i `GltfShaders.cs` (shadery glTFast do builda) są w
   `Assets/Editor/ProjectBootstrap/`.
 - **Foldery w Documents** (Finder: iPhone > Pliki > aplikacja, aplikacja Pliki albo „Więcej > Pliki”): `PDF`, `Filmy`, `Inne`, `Srodowiska`
