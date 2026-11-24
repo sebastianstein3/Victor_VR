@@ -242,6 +242,12 @@ namespace CardboardXR.Demos.Workspace
             m_Models.Clear();
             if (m_Drawing != null)
                 Destroy(m_Drawing.gameObject);
+            foreach (var game in m_Games)
+            {
+                if (game != null)
+                    Destroy(game.gameObject);
+            }
+            m_Games.Clear();
 
             if (m_Keyboard != null)
                 Destroy(m_Keyboard.gameObject);
@@ -613,7 +619,7 @@ namespace CardboardXR.Demos.Workspace
             };
             foreach (var widget in m_Widgets)
             {
-                if (widget != null && widget.Kind != "model" && widget.Kind != "rysowanie")
+                if (widget != null && widget.Kind != "model" && widget.Kind != "rysowanie" && widget.Kind != "gra")
                     saved.widgets.Add(new SavedWidget { kind = widget.Kind, data = widget.SaveData });
             }
             foreach (var screen in m_Screens)
@@ -763,6 +769,7 @@ namespace CardboardXR.Demos.Workspace
                 new("Widżety", OpenWidgetMenu),
                 new("Układy", OpenLayouts),
                 new("Rysowanie", OpenDrawing),
+                new("Gry", OpenGames),
                 new("Filmy", OpenFilmPicker),
                 new("PDF", OpenPdfPicker),
                 new("Zdjęcia 3D", OpenSpatialPicker),
@@ -873,6 +880,47 @@ namespace CardboardXR.Demos.Workspace
                 }
             };
             ShowToast("Uszczypnij w powietrzu, aby rysować");
+        }
+
+        // ---- Board games on the table ----
+        readonly List<TableGame> m_Games = new();
+
+        public void OpenGames()
+        {
+            var screen = CreateNewScreen("Gry");
+            if (screen == null)
+                return;
+            var choices = new List<ChoiceList.Choice>
+            {
+                new("Warcaby", () => StartGame<CheckersGame>()),
+                new("Chińczyk", () => StartGame<LudoGame>()),
+            };
+            screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Gry na stole: spójrz na stół i wybierz", choices);
+        }
+
+        void StartGame<T>() where T : TableGame
+        {
+            if (m_Core == null)
+                return;
+            var game = new GameObject(typeof(T).Name).AddComponent<T>();
+            game.transform.SetParent(transform, true);
+            game.Initialize(m_Core.Head);
+            game.PlaceAtGaze();
+            m_Games.Add(game);
+            game.Closed += g => m_Games.Remove(g);
+            game.Moving += g => { if (m_RoomAnchors != null) m_RoomAnchors.Release(g.transform); };
+
+            // Its panel, beside the board at about eye level
+            var size = new Vector2(390f, 210f);
+            var controls = WidgetPanel.Create<GameControls>(transform, m_Core.Head, size, game.Title, 0.9f);
+            controls.Attach(game);
+            Vector3 point = game.transform.position;
+            var right = Vector3.Cross(Vector3.up, Vector3.ProjectOnPlane(point - m_Core.Head.position, Vector3.up).normalized);
+            var position = point + right * 0.4f + Vector3.up * 0.3f;
+            controls.transform.SetPositionAndRotation(position, Quaternion.LookRotation(position - m_Core.Head.position, Vector3.up));
+            m_Widgets.Add(controls);
+            controls.Closed += w => m_Widgets.Remove(w);
+            ShowToast(typeof(T) == typeof(LudoGame) ? "Chińczyk: rzuć kostką na panelu" : "Warcaby: Ty grasz białymi");
         }
 
         // ---- The iPhone's Photos library (one gallery window at a time: it shares the native list) ----
@@ -1268,6 +1316,22 @@ namespace CardboardXR.Demos.Workspace
                 case "galeria": case "zdjęcia z telefonu": case "gallery": case "photos":
                     OpenGallery();
                     break;
+                case "gry": case "gra": case "games":
+                    OpenGames();
+                    break;
+                case "warcaby": case "checkers":
+                    StartGame<CheckersGame>();
+                    break;
+                case "chińczyk": case "ludo":
+                    StartGame<LudoGame>();
+                    break;
+                case "rzuć": case "rzuć kostką": case "kostka": case "roll":
+                    foreach (var game in m_Games)
+                    {
+                        if (game != null && game.ActionLabel != null)
+                            game.Action();
+                    }
+                    break;
                 case "rysuj": case "rysowanie": case "draw":
                     OpenDrawing();
                     break;
@@ -1648,6 +1712,11 @@ namespace CardboardXR.Demos.Workspace
             }
             if (m_Drawing != null && m_Drawing.StrokeCount > 0)
                 m_RoomAnchors.Keep(m_Drawing.transform, false);
+            foreach (var game in m_Games)
+            {
+                if (game != null)
+                    m_RoomAnchors.Keep(game.transform, false);
+            }
             if (m_Keyboard != null && m_Keyboard.gameObject.activeSelf)
                 m_RoomAnchors.Keep(m_Keyboard.transform, false);
             if (m_Trackpad != null && m_Trackpad.gameObject.activeSelf)
@@ -1716,6 +1785,14 @@ namespace CardboardXR.Demos.Workspace
             // at the window itself or at the room.)
             if (DropCarried())
                 return true;
+
+            // A board game's piece, field or dice
+            var cell = gazeTarget != null ? gazeTarget.GetComponentInParent<GameCell>() : null;
+            if (cell != null && cell.Game != null)
+            {
+                cell.Game.Pick(cell);
+                return true;
+            }
 
             // Drawing: a pinch not on a window or panel draws (it needs the hand's position: 6DoF)
             if (m_Drawing != null && m_Drawing.Active &&
