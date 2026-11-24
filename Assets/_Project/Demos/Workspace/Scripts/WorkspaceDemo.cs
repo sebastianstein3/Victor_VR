@@ -71,6 +71,7 @@ namespace CardboardXR.Demos.Workspace
             var choices = new List<ChoiceList.Choice>();
             if (ModelViewer.Available)
             {
+                choices.Add(new ChoiceList.Choice("Pobierz modele", OpenModelDownloader, "cloud_download"));
                 foreach (var file in ModelViewer.FindFiles())
                 {
                     string path = file;
@@ -78,12 +79,20 @@ namespace CardboardXR.Demos.Workspace
                 }
             }
             string empty = ModelViewer.Available
-                ? "Brak modeli. Wrzuć pliki .glb do folderu Modele aplikacji (Finder lub Pliki). Po wyborze spójrz na stół: model stanie tam, gdzie patrzysz."
+                ? "Brak modeli. Pobierz je („Pobierz modele”) albo wrzuć pliki .glb do folderu Modele (Finder, Pliki). Po wyborze spójrz na stół: model stanie tam, gdzie patrzysz. Uszczypnij model, aby go chwycić; obrót nadgarstka go obraca."
                 : "Modele 3D wymagają pakietu glTFast: Unity > Package Manager > Add package by name > com.unity.cloud.gltfast.";
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Modele 3D", choices, empty);
         }
 
         // at: a saved place (null: the surface looked at); yaw / scale: saved heading and size
+        // Free models from the internet (a catalog, or your own links in modele_url.txt) into the Modele folder
+        public void OpenModelDownloader()
+        {
+            var screen = CreateNewScreen("Pobierz modele");
+            if (screen != null)
+                screen.gameObject.AddComponent<ModelDownloader>().Initialize(screen, path => PlaceModel(path));
+        }
+
         void PlaceModel(string path, Vector3? at = null, float yaw = float.NaN, float scale = 1f)
         {
             var point = at ?? ModelViewer.PlacementPoint(m_Core.Head);
@@ -1373,6 +1382,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "modele": case "modele 3d": case "model": case "models":
                     OpenModelPicker();
+                    break;
+                case "pobierz model": case "pobierz modele": case "download models":
+                    OpenModelDownloader();
                     break;
                 case "wyłącz środowisko": case "pokój": case "room":
                     m_Environment?.Show(null);
