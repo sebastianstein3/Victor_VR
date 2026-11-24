@@ -119,8 +119,8 @@ Shader "CardboardXR/Hologram"
                 float pulse = 0.0;
                 if (_Pulse > 0.001 && _Billboard < 0.5)
                 {
-                    float head = frac(_PulseTime + input.uv.y) * 2.5;
-                    float along = (input.uv.x - head) * 10.0;
+                    float head = frac(_PulseTime + input.uv.y) * 4.0; // a packet on a quarter of the lines at a time
+                    float along = (input.uv.x - head) * 14.0;
                     pulse = exp(-along * along) * _Pulse;
                 }
                 half3 colour = input.color.rgb;

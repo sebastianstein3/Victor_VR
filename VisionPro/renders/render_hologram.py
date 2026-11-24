@@ -34,6 +34,9 @@ CYAN = np.array([0.25, 0.85, 1.0])
 ORANGE = np.array([1.0, 0.55, 0.15])
 WHITE = np.array([0.92, 0.98, 1.0])
 HOT = np.array([1.0, 0.75, 0.35])
+GOLD = np.array([1.0, 0.72, 0.22])
+HOTG = np.array([1.0, 0.88, 0.55])
+AMBER = np.array([1.0, 0.5, 0.12])
 
 SCALE = 1.2  # HologramAssistant.k_Scale: the whole figure
 CONTROLS_SCALE = 0.7  # the buttons' panel is 0.7 of a window's size
@@ -120,7 +123,7 @@ class Frame:
         weight = (length / (n - 1) if n > 1 else 1.0) * SS  # 1 px lines at the final size
         base = tint[None] * intensity * self.shimmer(world)[:, None]
         if pulse is not None and pulse[0] > 0:
-            p = np.exp(-(((t[:, 0] - pulse[1]) * 10.0) ** 2)) * pulse[0]
+            p = np.exp(-(((t[:, 0] - pulse[1]) * 14.0) ** 2)) * pulse[0]
             value = (color * base * (1 + 5 * p[:, None]) + np.array([0.5, 0.45, 0.35])[None] * (p * alpha * intensity)[:, None]) * weight
         else:
             value = color * base * weight
@@ -157,7 +160,7 @@ class Frame:
         shimmer = self.shimmer(np.asarray(center, float))
         self.acc[y0:y1, x0:x1] += soft[..., None] * (self.recolor(color) * tint * intensity * shimmer)[None, None]
 
-    def triangle(self, pa, pb, pc, ca, cb, cc, intensity, tint, fresnel=0.0):
+    def triangle(self, pa, pb, pc, ca, cb, cc, intensity, tint, fresnel=0.0, smooth_from=None):
         """A filled triangle with a colour (rgb * alpha) per vertex. fresnel > 0: the shell's rim light."""
         pa, pb, pc = (np.asarray(q, float) * self.s for q in (pa, pb, pc))
         xs, ys, _ = self.cam.project(np.array([pa, pb, pc]))
@@ -177,7 +180,10 @@ class Frame:
         mid = (np.array(pa) + np.array(pb) + np.array(pc)) / 3
         rim = 1.0
         if fresnel > 0.01:
-            normal = np.cross(pb - pa, pc - pa)
+            if smooth_from is not None:  # a smooth ball: the normal points away from its centre
+                normal = mid - np.asarray(smooth_from, float) * self.s
+            else:
+                normal = np.cross(pb - pa, pc - pa)
             normal = normal / max(np.linalg.norm(normal), 1e-9)
             to_camera = self.cam.eye - mid
             to_camera = to_camera / np.linalg.norm(to_camera)
@@ -196,23 +202,15 @@ def premult(color, alpha):
 
 
 # ---- The hologram, as HologramAssistant.cs builds it ----
-class Hologram:
-    def __init__(self):
-        rnd = np.random.RandomState(11)
-        self.rnd = rnd
-        self.build_network(rnd)
-        self.build_dust(np.random.RandomState(5))
-        self.tick_noise = np.random.RandomState(3).rand(TICKS)
-        self.build_shell(np.random.RandomState(3))
-
-    def build_shell(self, rnd):
-        """HoloMesh.Icosphere(1): 42 corners, 80 facets; the corners pushed in and out."""
-        t = (1 + math.sqrt(5)) / 2
-        corners = [(-1, t, 0), (1, t, 0), (-1, -t, 0), (1, -t, 0), (0, -1, t), (0, 1, t),
-                   (0, -1, -t), (0, 1, -t), (t, 0, -1), (t, 0, 1), (-t, 0, -1), (-t, 0, 1)]
-        corners = [np.array(c, float) / np.linalg.norm(c) for c in corners]
-        faces = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
-                 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1]
+def icosphere(subdivisions):
+    """HoloMesh.Icosphere: a unit icosphere (12 corners, 20 faces; each subdivision splits a face in four)."""
+    t = (1 + math.sqrt(5)) / 2
+    corners = [(-1, t, 0), (1, t, 0), (-1, -t, 0), (1, -t, 0), (0, -1, t), (0, 1, t),
+               (0, -1, -t), (0, 1, -t), (t, 0, -1), (t, 0, 1), (-t, 0, -1), (-t, 0, 1)]
+    corners = [np.array(c, float) / np.linalg.norm(c) for c in corners]
+    faces = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+             3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1]
+    for _ in range(subdivisions):
         middles = {}
 
         def middle(a, b):
@@ -228,53 +226,96 @@ class Hologram:
             a, b, c = faces[i:i + 3]
             ab, bc, ca = middle(a, b), middle(b, c), middle(c, a)
             split += [a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca]
-        self.shell_corners = [c * RAD * 1.27 * (0.9 + 0.2 * rnd.rand()) for c in corners]
-        self.shell_triangles = [tuple(split[i:i + 3]) for i in range(0, len(split), 3)]
-        seen = set()
-        self.shell_edges = []
-        for tri in self.shell_triangles:
-            for e in range(3):
-                a, b = tri[e], tri[(e + 1) % 3]
-                key = (min(a, b), max(a, b))
-                if key not in seen:
-                    seen.add(key)
-                    self.shell_edges.append((a, b))
+        faces = split
+    return corners, [tuple(faces[i:i + 3]) for i in range(0, len(faces), 3)]
 
-    def build_network(self, rnd):
-        pts = []
-        for _ in range(230):
-            u = rnd.rand() * 2 - 1
-            th = rnd.rand() * math.pi * 2
-            s = math.sqrt(1 - u * u)
-            d = np.array([s * math.cos(th), u, s * math.sin(th)])
-            rho = RAD * (0.5 + 0.46 * math.sqrt(rnd.rand()))
-            p = np.array([d[0], d[1] * 0.85, d[2] * 1.08]) * rho
-            p[0] += math.copysign(1, p[0]) * RAD * 0.07 * math.exp(-((p[0] / (RAD * 0.25)) ** 2))
-            p = p * (1 + 0.07 * math.sin(d[1] * 9 + d[0] * 7) * math.cos(d[2] * 8))
-            pts.append(p)
-        self.points = np.array(pts)
-        seen = set()
-        self.edges = []
-        for i in range(len(pts)):
-            dist = np.sum((self.points - self.points[i]) ** 2, axis=1)
-            dist[i] = 1e9
-            for j in np.argsort(dist)[:3]:
-                key = (min(i, j), max(i, j))
-                if key in seen:
-                    continue
-                seen.add(key)
-                color = ORANGE if rnd.rand() < 0.14 else CYAN
-                alpha = 0.25 + 0.35 * rnd.rand()
-                self.edges.append((self.points[i], self.points[j], premult(color, alpha), premult(color, alpha * 0.3), rnd.rand()))
-        self.node_sizes = [0.0013 + 0.0019 * rnd.rand() for _ in pts]
-        self.node_colors = []
-        for _ in pts:
-            warm = rnd.rand() < 0.12
-            self.node_colors.append(premult(ORANGE if warm else WHITE, 0.9 if warm else 0.7))
+
+def on_sphere(lat, lon, r):
+    return np.array([math.cos(lat) * math.cos(lon) * r, math.sin(lat) * r, math.cos(lat) * math.sin(lon) * r])
+
+
+def fragment_color(rnd, alpha):
+    pick = rnd.rand()
+    base = HOTG if pick < 0.12 else AMBER if pick < 0.35 else GOLD
+    return base * alpha
+
+
+class Hologram:
+    """The glass planet inside and the golden fragment halo, comets and base outside (HologramAssistant.cs)."""
+
+    COMETS = [  # radius (planet radii), span, tilt, speed
+        (1.30, 210, (20, 0, 35), 46), (1.45, 160, (-50, 0, 10), -38), (1.60, 250, (75, 0, -20), 29),
+        (1.75, 190, (10, 0, -60), -52), (1.90, 230, (-30, 0, 70), 24), (2.05, 140, (60, 0, 45), -33),
+    ]
+
+    def __init__(self):
+        self.tick_noise = np.random.RandomState(3).rand(TICKS)
+        self.build_dust(np.random.RandomState(5))
+        rnd = np.random.RandomState(21)
+        self.halo = [self.sphere_fragments(rnd, 430, RAD * 1.55), self.sphere_fragments(rnd, 350, RAD * 1.85)]
+        self.debris = self.disc_fragments(np.random.RandomState(34))
+        self.comet_tail = np.random.RandomState(8).rand(len(self.COMETS), 6)
+        self.glass_corners, self.glass_faces = icosphere(2)
+
+    @staticmethod
+    def sphere_fragments(rnd, count, radius):
+        """SphereFragments: runs that walk the latitude / longitude grid, turning by right angles."""
+        out = []
+        for _ in range(count):
+            lat = math.asin(rnd.rand() * 2 - 1)
+            lon = rnd.rand() * 2 * math.pi
+            r = radius * (0.94 + 0.12 * rnd.rand())
+            brightness = 0.15 + 0.85 * rnd.rand() ** 2
+            phase = rnd.rand()
+            steps = 2 + rnd.randint(4)
+            direction = rnd.randint(4)
+            prev = on_sphere(lat, lon, r)
+            for s_ in range(steps):
+                if rnd.rand() < 0.4:
+                    direction = (direction + (1 if rnd.randint(2) == 0 else 3)) % 4
+                step = 0.02 + 0.06 * rnd.rand()
+                if direction == 0:
+                    lon += step / max(math.cos(lat), 0.25)
+                elif direction == 1:
+                    lat = min(lat + step, 1.35)
+                elif direction == 2:
+                    lon -= step / max(math.cos(lat), 0.25)
+                else:
+                    lat = max(lat - step, -1.35)
+                nxt = on_sphere(lat, lon, r)
+                color = fragment_color(rnd, brightness * (1 - s_ * 0.12))
+                out.append((prev, nxt, color, color * 0.85, phase + 0.13 * s_))
+                prev = nxt
+        return out
+
+    @staticmethod
+    def disc_fragments(rnd):
+        """BuildDebris: circuit-like runs on a polar grid."""
+        out = []
+        for _ in range(150):
+            ring = rnd.randint(7)
+            angle = rnd.rand() * 2 * math.pi
+            brightness = 0.15 + 0.75 * rnd.rand() ** 2
+            phase = rnd.rand()
+            along = rnd.randint(2) == 0
+            sign = 1 if rnd.randint(2) == 0 else -1
+            prev = Hologram.polar(BASE_R * (0.36 + ring * 0.085), angle, 0.003)
+            for s_ in range(2 + rnd.randint(4)):
+                if rnd.rand() < 0.45:
+                    along = not along
+                if along:
+                    angle += sign * (0.06 + 0.16 * rnd.rand())
+                else:
+                    ring = min(6, max(0, ring + (1 if rnd.randint(2) == 0 else -1)))
+                nxt = Hologram.polar(BASE_R * (0.36 + ring * 0.085), angle, 0.003)
+                color = fragment_color(rnd, brightness * (1 - s_ * 0.1))
+                out.append((prev, nxt, color, color, phase + 0.13 * s_))
+                prev = nxt
+        return out
 
     def build_dust(self, rnd):
         self.dust = []
-        for _ in range(120):
+        for _ in range(220):
             while True:
                 p = rnd.rand(3) * 2 - 1
                 if p @ p <= 1:
@@ -283,77 +324,82 @@ class Hologram:
             p[1] = max(0.01, p[1] * 0.8 + HEIGHT * 0.85)
             size = 0.0008 + 0.0014 * rnd.rand()
             warm = rnd.rand() < 0.25
-            color = premult(ORANGE if warm else WHITE, 0.25 + 0.55 * rnd.rand())
-            self.dust.append((p, size, color))
+            self.dust.append((p, size, (AMBER if warm else HOTG) * (0.3 + 0.65 * rnd.rand())))
 
     def render(self, frame, state, level, now, globe_angle, ring_angles, dust_angle, wave_us=(), base_angle=0.0, sweep_angle=0.0,
-               pulse_clock=0.37, dial_angle=40.0):
+               pulse_clock=0.37, dial_angle=40.0, comet_angles=(30, 100, 200, 60, 150, 250)):
         """state: idle / listening / thinking / speaking, as Update() sets them."""
         busy = 3.0 if state == "thinking" else 2.2 if state == "listening" else 1.0
+        tint = np.ones(3)
         if state == "listening":
-            ring_scale, glow, tint = 0.8, 0.95, np.array([0.85, 1.0, 1.0])
+            ring_scale, glow, halo_scale = 0.8, 0.95, 0.88
             lift, wave = 0.006 + 0.012, 0.0
             core_scale, core_int = 1.0, 0.7 + 0.4
             pulse, flare = 0.6, 0.3 + 0.3
+            warm = 0.0
         elif state == "thinking":
-            ring_scale, glow, tint = 1.08 + 0.06 * math.sin(now * 9), 0.9 + 0.15 * math.sin(now * 23), np.ones(3)
-            frame.warm = 0.75
+            ring_scale, glow, halo_scale = 1.08 + 0.06 * math.sin(now * 9), 0.9 + 0.15 * math.sin(now * 23), 1.0
             lift, wave = 0.006, 0.01
             core_scale, core_int = 1 + 0.12 * math.sin(now * 20), 0.7
             pulse, flare = 1.0, 0.3 + 0.25 + 0.2 * math.sin(now * 17)
+            warm = 0.75
         elif state == "speaking":
-            ring_scale, glow, tint = 1 + 0.08 * level, 0.75 + 0.5 * level, np.ones(3)
+            ring_scale, glow, halo_scale = 1 + 0.08 * level, 0.75 + 0.5 * level, 1 + 0.07 * level
             lift, wave = 0.006 + 0.05 * level, 0.0
             core_scale, core_int = 1 + 0.7 * level + 0.05 * math.sin(now * 2), 0.7 + 0.8 * level
             pulse, flare = 0.5 + 0.5 * level, 0.3 + 0.9 * level
+            warm = 0.0
         else:
-            ring_scale, glow, tint = 1.0, 0.6 + 0.05 * math.sin(now * 1.3), np.ones(3)
+            ring_scale, glow, halo_scale = 1.0, 0.6 + 0.05 * math.sin(now * 1.3), 1.0
             lift, wave = 0.006, 0.0
             core_scale, core_int = 1 + 0.05 * math.sin(now * 2), 0.7
             pulse, flare = 0.35, 0.3
+            warm = 0.0
         white = np.ones(3)
         centre = np.array([0, HEIGHT, 0])
+        frame.warm = warm
 
-        # Base ring A: the outer circle, 60 ticks, the orange dial
-        self.circle(frame, np.eye(3), np.zeros(3), BASE_R, BASE_R, premult(CYAN, 0.6), glow, tint, plane="xz", y=0.002)
+        # ---- The base, in gold ----
+        for radius, alpha, kind in ((1.0, 0.6, "c"),):
+            self.circle(frame, np.eye(3), np.zeros(3), BASE_R, BASE_R, premult(GOLD, alpha), glow, tint, plane="xz", y=0.002)
         for i in range(60):
             ang = i * 2 * math.pi / 60
             inner = BASE_R * (0.88 if i % 5 == 0 else 0.93)
-            frame.line(self.polar(BASE_R * 0.97, ang), self.polar(inner, ang), premult(CYAN, 0.5), premult(CYAN, 0.5), glow, tint)
-        self.circle(frame, np.eye(3), np.zeros(3), BASE_R * 1.08, BASE_R * 1.08, premult(ORANGE, 0.5), glow, tint, plane="xz", y=0.002)
-        # Ring B (turns one way): three arcs with gaps, a faint circle
+            frame.line(self.polar(BASE_R * 0.97, ang), self.polar(inner, ang), premult(GOLD, 0.5), premult(GOLD, 0.5), glow, tint)
+        self.circle(frame, np.eye(3), np.zeros(3), BASE_R * 1.08, BASE_R * 1.08, premult(AMBER, 0.55), glow, tint, plane="xz", y=0.002)
         turn_b = base_angle * 18.0
         for k in range(3):
-            self.arc(frame, BASE_R * 0.78, k * 120 - turn_b, 80, premult(CYAN, 0.75), glow, tint)
-            self.arc(frame, BASE_R * 0.72, k * 120 + 60 - turn_b, 40, premult(CYAN, 0.45), glow, tint)
-        self.arc(frame, BASE_R * 0.86, 0, 360, premult(CYAN, 0.18), glow, tint)
-        # Ring C (the other way): dashes, an inner circle, spokes
+            self.arc(frame, BASE_R * 0.78, k * 120 - turn_b, 80, premult(GOLD, 0.75), glow, tint)
+            self.arc(frame, BASE_R * 0.72, k * 120 + 60 - turn_b, 40, premult(GOLD, 0.45), glow, tint)
+        self.arc(frame, BASE_R * 0.86, 0, 360, premult(GOLD, 0.18), glow, tint)
         turn_c = -base_angle * 30.0
         for k in range(24):
-            self.arc(frame, BASE_R * 0.55, k * 15 - turn_c, 9, premult(CYAN, 0.55), glow, tint)
-        self.arc(frame, BASE_R * 0.3, 0, 360, premult(CYAN, 0.35), glow, tint)
+            self.arc(frame, BASE_R * 0.55, k * 15 - turn_c, 9, premult(GOLD, 0.55), glow, tint)
+        self.arc(frame, BASE_R * 0.3, 0, 360, premult(GOLD, 0.35), glow, tint)
         for k in range(8):
             ang = k * math.pi / 4 - math.radians(turn_c)
-            frame.line(self.polar(BASE_R * 0.3, ang), self.polar(BASE_R * 0.55, ang), premult(CYAN, 0.25), premult(CYAN, 0.25), glow, tint)
+            frame.line(self.polar(BASE_R * 0.3, ang), self.polar(BASE_R * 0.55, ang), premult(GOLD, 0.25), premult(GOLD, 0.25), glow, tint)
 
-        # Disc (a fan, bright in the middle, gone at the rim)
+        # The floor of circuit fragments (turns the other way, light running along it)
+        rd_floor = ry(-base_angle * 9.0)
+        for a, b, ca, cb, phase in self.debris:
+            head = ((pulse_clock + phase) % 1.0) * 4.0
+            frame.line(rd_floor @ a, rd_floor @ b, ca, cb, glow * (0.85 + 0.5 * level), tint, pulse=(pulse, head),
+                       alpha=float(ca.max()))
+
         center = np.array([0, 0.001, 0.0])
         for i in range(48):
             a0, a1 = i * 2 * math.pi / 48, (i + 1) * 2 * math.pi / 48
             p0 = np.array([math.cos(a0) * BASE_R, 0.001, math.sin(a0) * BASE_R])
             p1 = np.array([math.cos(a1) * BASE_R, 0.001, math.sin(a1) * BASE_R])
-            frame.triangle(center, p0, p1, premult(CYAN, 0.16), premult(CYAN, 0.03), premult(CYAN, 0.03), glow * (0.9 + 0.5 * level), tint)
-
-        # Radar sweep: a 70 degree wedge, brightest at its leading edge
+            frame.triangle(center, p0, p1, premult(GOLD, 0.16), premult(GOLD, 0.03), premult(GOLD, 0.03), glow * (0.9 + 0.5 * level), tint)
         sweep_glow = glow * (0.7 if state == "idle" else 1.4)
         origin = np.array([0, 0.0025, 0.0])
         for i in range(16):
             a0 = math.radians(-70.0 * i / 16 - sweep_angle)
             a1 = math.radians(-70.0 * (i + 1) / 16 - sweep_angle)
             frame.triangle(origin, self.polar(BASE_R * 0.95, a0, 0.0025), self.polar(BASE_R * 0.95, a1, 0.0025),
-                           premult(CYAN, 0.05), premult(CYAN, 0.34 * (1 - i / 16)), premult(CYAN, 0.34 * (1 - (i + 1) / 16)), sweep_glow, tint)
-
-        # Beam: a cone from the base to just under the globe, fading out
+                           premult(GOLD, 0.05), premult(GOLD, 0.34 * (1 - i / 16)), premult(GOLD, 0.34 * (1 - (i + 1) / 16)), sweep_glow, tint)
         top = HEIGHT - RAD * 0.8
         for i in range(24):
             a0, a1 = i * 2 * math.pi / 24, (i + 1) * 2 * math.pi / 24
@@ -361,21 +407,21 @@ class Hologram:
             t0 = np.array([math.cos(a0) * 0.03, top, math.sin(a0) * 0.03])
             b1 = np.array([math.cos(a1) * 0.07, 0.003, math.sin(a1) * 0.07])
             t1 = np.array([math.cos(a1) * 0.03, top, math.sin(a1) * 0.03])
-            cb_, ct_ = premult(CYAN, 0.13), premult(CYAN, 0.0)
+            cb_, ct_ = premult(GOLD, 0.13), premult(GOLD, 0.0)
             frame.triangle(b0, t0, t1, cb_, ct_, ct_, glow * (0.9 + 0.6 * level), tint)
             frame.triangle(b0, t1, b1, cb_, ct_, cb_, glow * (0.9 + 0.6 * level), tint)
-        frame.dot(np.array([0, 0.01, 0]), 0.075, premult(CYAN, 0.25), glow * (0.8 + level), tint)
+        frame.dot(np.array([0, 0.01, 0]), 0.075, premult(GOLD, 0.25), glow * (0.8 + level), tint)
 
-        # Ticks (the equalizer): orange already, _Warm 0
-        warm_now, frame.warm = frame.warm, 0.0
+        # Equalizer ticks (_Warm 0)
+        frame.warm = 0.0
         for i in range(TICKS):
             a = i * 2 * math.pi / TICKS
             p = np.array([math.cos(a) * BASE_R * 1.08, 0.002, math.sin(a) * BASE_R * 1.08])
             h = 0.004 + self.tick_noise[i] * (lift + (wave * (0.5 + 0.5 * math.sin(now * 6 - i * 0.5)) if wave else 0))
-            frame.line(p, p + np.array([0, h, 0]), premult(ORANGE, 0.95), premult(HOT, 0.25), 0.9 + 0.6 * level, white)
-        frame.warm = warm_now
+            frame.line(p, p + np.array([0, h, 0]), premult(GOLD, 0.95), premult(HOTG, 0.25), 0.9 + 0.6 * level, white)
+        frame.warm = warm
 
-        # Globe, filaments, nodes: turned about a tilted axis
+        # ---- The planet: wire globe and glass ----
         rot = euler(0, 0, 18) @ euler(0, globe_angle, 0)
         scale = 1 + 0.04 * level
 
@@ -391,26 +437,11 @@ class Hologram:
             y, ring = math.sin(rad) * RAD, math.cos(rad) * RAD
             pts = [gp([math.cos(a) * ring, y, math.sin(a) * ring]) for a in np.linspace(0, 2 * math.pi, 65)]
             self.polyline(frame, pts, premult(CYAN, 0.85 if lat == 0 else 0.5), glow, tint)
-        for a, b, ca, cb, phase in self.edges:
-            head = ((pulse_clock + phase) % 1.0) * 2.5
-            frame.line(gp(a), gp(b), ca, cb, glow * (0.8 + 0.6 * level), tint, pulse=(pulse, head), alpha=float(ca.max()) if ca.max() > 0 else 0.0)
-        for p, size, color in zip(self.points, self.node_sizes, self.node_colors):
-            frame.dot(gp(p), size * scale, color, glow * (0.9 + 0.7 * level), tint)
-
-        # The crystal shell: 80 cut facets that glow at their edges, bright edges and corners, turning the other way
-        shell_rot = euler(12, -globe_angle * 0.6, 0)
-
-        def sp(p):
-            return shell_rot @ p + centre
-
-        for tri in self.shell_triangles:
-            pa, pb, pc = (sp(self.shell_corners[i]) for i in tri)
-            frame.triangle(pa, pb, pc, premult(CYAN, 0.09), premult(CYAN, 0.09), premult(CYAN, 0.09), glow * (1 + level), tint, fresnel=2.2)
-        for a, b in self.shell_edges:
-            frame.line(sp(self.shell_corners[a]), sp(self.shell_corners[b]), premult(CYAN, 0.42), premult(WHITE, 0.42),
-                       glow * (0.8 + 0.6 * level), tint)
-        for corner in self.shell_corners:
-            frame.dot(sp(corner), 0.0028, premult(WHITE, 0.95), glow * (0.9 + 0.8 * level), tint)
+        glass = [rot @ (c * RAD * 1.02 * scale) + centre for c in self.glass_corners]
+        for tri in self.glass_faces:
+            pa, pb, pc = (glass[i] for i in tri)
+            frame.triangle(pa, pb, pc, premult(CYAN, 0.16), premult(CYAN, 0.16), premult(CYAN, 0.16),
+                           glow * (1 + 0.8 * level), tint, fresnel=2.2, smooth_from=centre)
 
         # Rings with dots
         specs = [(1.55, 1.30, (28, 0, 18), ORANGE), (1.40, 1.40, (72, 0, 0), CYAN), (1.85, 1.15, (-18, 0, -28), CYAN)]
@@ -426,7 +457,35 @@ class Hologram:
                 local = np.array([sign * a * RAD, 0, 0]) * ring_scale
                 frame.dot(rot_r @ local + centre, size * ring_scale, premult(color, alpha), glow * 1.2, tint)
 
-        # The vertical dial: a gauge circle facing the user, a scale of ticks, an orange arc
+        # ---- The golden halo: two shells of fragments, turning against each other ----
+        shell_rots = [euler(22, globe_angle * 0.5, 8), euler(-28, -globe_angle * 0.35, -12)]
+        for fragments, shell_rot in zip(self.halo, shell_rots):
+            for a, b, ca, cb, phase in fragments:
+                head = ((pulse_clock + phase) % 1.0) * 4.0
+                frame.line(shell_rot @ (a * halo_scale) + centre, shell_rot @ (b * halo_scale) + centre, ca, cb,
+                           glow * (0.85 + 0.5 * level), tint, pulse=(pulse, head), alpha=float(ca.max()))
+
+        # ---- Comets: bright arcs with a spark at their head ----
+        for (radius_m, span, tilt, _), angle, tail in zip(self.COMETS, comet_angles, self.comet_tail):
+            radius = RAD * radius_m
+            rot_c = euler(*tilt) @ euler(0, angle, 0)
+            for offset in (-0.0012, 0.0, 0.0012):
+                prev = self.polar(radius + offset, 0.0, 0.0)
+                for i in range(1, 49):
+                    t = i / 48
+                    nxt = self.polar(radius + offset, math.radians(span * t), 0.0)
+                    alpha = t ** 2.2 * (0.95 if offset == 0.0 else 0.55)
+                    color = GOLD * (1 - t) + HOTG * t
+                    frame.line(rot_c @ prev + centre, rot_c @ nxt + centre, color * alpha * 0.85, color * alpha, glow * (0.9 + 0.5 * level), tint)
+                    prev = nxt
+            head = rot_c @ self.polar(radius, math.radians(span), 0.0) + centre
+            frame.dot(head, 0.0065, premult(WHITE, 1.0), glow * (1 + 0.6 * level), tint)
+            frame.dot(head, 0.02, premult(GOLD, 0.45), glow * (1 + 0.6 * level), tint)
+            for u in tail:
+                frame.dot(rot_c @ self.polar(radius, math.radians(span * (0.35 + 0.6 * u)), 0.0) + centre, 0.0015, premult(HOTG, 0.7),
+                          glow * (1 + 0.6 * level), tint)
+
+        # ---- The thin gauge ring round it all ----
         radius = RAD * 2.45
         spin = math.radians(dial_angle)
 
@@ -435,38 +494,38 @@ class Hologram:
             return centre + np.array([math.cos(a) * r, math.sin(a) * r, 0.0])
 
         for i in range(0, 360, 3):
-            frame.line(on(radius, i), on(radius, i + 3), premult(CYAN, 0.4), premult(CYAN, 0.4), glow * 0.9, tint)
+            frame.line(on(radius, i), on(radius, i + 3), premult(GOLD, 0.4), premult(GOLD, 0.4), glow * 0.9, tint)
         for i in range(120):
             length = 0.034 if i % 10 == 0 else 0.024 if i % 5 == 0 else 0.012
-            frame.line(on(radius, i * 3), on(radius - length, i * 3), premult(CYAN, 0.5), premult(CYAN, 0.5), glow * 0.9, tint)
+            frame.line(on(radius, i * 3), on(radius - length, i * 3), premult(GOLD, 0.5), premult(GOLD, 0.5), glow * 0.9, tint)
         for layer in range(3):
             r = radius * (0.955 - layer * 0.006)
             for i in range(-30, 95, 3):
-                frame.line(on(r, i), on(r, i + 3), premult(ORANGE, 0.9), premult(ORANGE, 0.9), glow * 0.9, tint)
+                frame.line(on(r, i), on(r, i + 3), premult(AMBER, 0.9), premult(AMBER, 0.9), glow * 0.9, tint)
         for i in range(110, 310, 3):
-            frame.line(on(radius * 0.9, i), on(radius * 0.9, i + 3), premult(CYAN, 0.45), premult(CYAN, 0.45), glow * 0.9, tint)
+            frame.line(on(radius * 0.9, i), on(radius * 0.9, i + 3), premult(GOLD, 0.45), premult(GOLD, 0.45), glow * 0.9, tint)
 
-        # Waves of light
+        # Waves of light leaving the planet
         for u in wave_us:
-            s = 1.05 + (2.6 - 1.05) * u
+            s_ = 1.05 + (2.6 - 1.05) * u
             inten = (1 - u) ** 2 * 1.3
             for plane, alpha in (("xz", 0.8), ("xy", 0.5), ("yz", 0.5)):
-                self.circle(frame, np.eye(3), centre, RAD * s, RAD * s, premult(CYAN, alpha), inten, tint, plane=plane, y=0)
+                self.circle(frame, np.eye(3), centre, RAD * s_, RAD * s_, premult(GOLD, alpha), inten, tint, plane=plane, y=0)
 
-        # Core: a halo, a hot middle, a white point (warm already: _Warm 0, as the code passes it)
+        # ---- The planet's glow: soft orange light, a hot middle, a white heart, a cool highlight ----
         frame.warm = 0.0
-        for radius_c, color in ((0.055, premult(ORANGE, 0.42)), (0.028, premult(HOT, 0.8)), (0.011, premult(white, 1.0))):
-            frame.dot(centre, radius_c * core_scale, color, core_int, white)
-        # The lens flare: a long streak across, a short upright one, a thin warm one
-        for (rx_, ry_), color in (((0.17, 0.0035), premult(WHITE, 0.5)), ((0.0035, 0.07), premult(CYAN, 0.3)), ((0.05, 0.0025), premult(ORANGE, 0.6))):
+        for offset, radius_c, color in (((0, 0, 0), 0.09, premult(ORANGE, 0.36)), ((0, 0, 0), 0.052, premult(np.array([1, 0.75, 0.35]), 0.62)),
+                                        ((0, 0, 0), 0.022, premult(white, 1.0)), ((-0.026, 0.03, 0.02), 0.035, premult(CYAN, 0.22))):
+            frame.dot(centre + np.array(offset) * core_scale, radius_c * core_scale, color, core_int, white)
+        for (rx_, ry_), color in (((0.17, 0.0035), premult(HOTG, 0.5)), ((0.0035, 0.07), premult(GOLD, 0.3)), ((0.05, 0.0025), premult(AMBER, 0.6))):
             frame.dot(centre, rx_, color, flare, white, radius_y=ry_)
 
-        # Dust (drawn in while it thinks)
+        # Sparks (drawn in while it thinks)
         frame.warm = 0.75 if state == "thinking" else 0.0
         dust_scale = 0.9 if state == "thinking" else 1.0
         rd = ry(dust_angle)
         for p, size, color in self.dust:
-            frame.dot(dust_scale * (rd @ p), size, color, 0.8, tint)
+            frame.dot(dust_scale * (rd @ p), size, color, 0.9, tint)
 
     @staticmethod
     def polar(radius, angle, y=0.002):
@@ -710,7 +769,7 @@ if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     eye, target = (0.0, 0.5, -0.85), (0.0, 0.22, 0.0)
     shots = {
-        "idle": dict(state="idle", level=0.0, now=3.0, subtitle=[], base_angle=1.3, sweep_angle=35, dial_angle=40, pulse_clock=0.37),
+        "idle": dict(state="idle", level=0.0, now=3.0, subtitle=[], base_angle=1.3, sweep_angle=35, dial_angle=40, pulse_clock=0.37, comet_angles=(30, 100, 200, 60, 150, 250)),
         "listening": dict(state="listening", level=0.0, now=3.0, subtitle=[("słucham…", (154, 223, 242))],
                           base_angle=2.7, sweep_angle=140, dial_angle=95, pulse_clock=0.12),
         "thinking": dict(state="thinking", level=0.0, now=3.0, subtitle=[("myślę...", (92, 225, 255))], globe=120, rings=(70, 20, 250),

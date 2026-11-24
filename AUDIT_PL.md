@@ -332,6 +332,19 @@ przycisków 148 dp w menu 3 × 3, pauza przywróconego filmu na pierwszej klatce
   (~28 elementów rysowanych, ~230 węzłów, ~600 włókien, 80 ścian), trafienie wzrokiem w uchwyt, czy panel
   statusu nie zasłania okien, `Profiler.GetTotalAllocatedMemoryLong` poza buildem deweloperskim (jest zapas:
   `GC.GetTotalMemory`).
+- **Hologram v3: wnętrze jak konsola, reszta jak złoty hologram z filmu.** Na prośbę „wnętrze jak na pierwszym
+  obrazku (planeta), obwódka-aureola i podłoże jak z drugiego”: usunięta gęsta sieć włókien i kryształowa
+  powłoka z v2. **Wnętrze:** szklana kula (ikosfera 162 wierzchołki, gładkie normalne, `_Fresnel` – świeci na
+  krawędzi), siatka południków i równoleżników, miękka pomarańczowa poświata z białym sercem i chłodnym
+  refleksem, trzy pierścienie z kropkami, błysk. **Na zewnątrz (złoto):** dwie obracające się powłoki ze
+  ~780 fragmentów „układów scalonych” (losowe marsze po siatce szerokość/długość z zakrętami pod kątem
+  prostym, losowa jasność, w UV faza dla biegnącego światła), 6 jasnych łuków-komet (3 cienkie łuki obok siebie,
+  jasność rośnie ku głowie, iskra z poświatą na czele, kropki wzdłuż ogona), ~220 złotych iskier, cienka złota
+  tarcza ze skalą; podstawa w złocie: segmentowe pierścienie, „podłoga” ze 150 fragmentów na siatce
+  biegunowej, radar, smuga światła, ząbki-equalizer. Stany jak wcześniej (bursztyn przy myśleniu – `_Warm`
+  działa teraz na złoto, pogłębiając je). Paczki światła w shaderze rzadsze (co czwarta linia) i węższe.
+  Nie testowane: wydajność (~3000 odcinków halo + ~500 podłogi + komety; wszystko jako linie addytywne),
+  czytelność planety w gęstym halo na prawdziwym tle, wygląd z bliska (linie 1 px migoczą przy ruchu głowy).
 - **Modele 3D: chwytanie, pobieranie** (`Carryable.cs`, `ModelDownloader.cs`): uszczypnięcie modelu (collider
   dopasowany do bryły) = chwyt dłonią 6DoF (pozycja palców + obrót nadgarstka w osi pionowej) albo głową (3DoF
   i przycisk „Chwyć”); odstawiony opada na powierzchnię pod sobą (warstwa 30). Zapis modeli w układach.

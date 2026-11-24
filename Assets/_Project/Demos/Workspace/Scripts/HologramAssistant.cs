@@ -8,21 +8,25 @@ using UnityEngine;
 
 namespace CardboardXR.Demos.Workspace
 {
-    // The assistant as a hologram, like Jarvis's: a glowing wire globe holding a web of filaments (a
-    // "virtual brain") around a warm core, three tilted rings with dots circling it, a projector base with
-    // concentric rings, an equalizer of orange ticks round its rim, a beam of light up to the globe, and
-    // drifting dust. It stands on the table you look at (or floats), can be picked up and turned like a
-    // model (Carryable), and shows what the assistant is doing:
-    //   idle       slow, calm, cyan
-    //   listening  the rings draw in, brighter
-    //   thinking   everything spins faster and glows warm, the core flickers
+    // The assistant as a hologram, like Jarvis's. Two looks put together:
+    //  * the inside is a glass planet, as on the voice-interface console: a faint glass ball that glows at
+    //    its rim, a wire globe of meridians and parallels, a soft orange glow with a white heart, a lens flare
+    //    across it, and three tilted rings with dots circling it;
+    //  * the outside is like the golden hologram from the film: a halo made of thousands of glowing
+    //    circuit-like fragments on two turning shells, bright arcs sweeping round like comets with a spark at
+    //    their head, drifting golden sparks, and a thin gauge ring round it all. Below it, a projector base in
+    //    the same gold: segmented rings turning against each other, a floor of circuit fragments, a radar
+    //    sweep, a rim of equalizer ticks and a beam of light up to the planet.
+    // It stands on the table you look at (or floats), can be picked up and turned like a model (Carryable),
+    // and shows what the assistant is doing:
+    //   idle       slow and calm
+    //   listening  the halo and rings draw in, brighter
+    //   thinking   everything spins faster and glows deep amber, the core flickers
     //   speaking   the core and ticks pulse with every word the phone reads, rings of light go out from the
-    //              globe, and the words appear as subtitles with the current one lit
+    //              planet, and the words appear as subtitles with the current one lit
     // Everything is built from code: lines, soft dots and a few triangles, drawn additively by the shader
-    // "CardboardXR/Hologram". Round the brain: a faceted crystal shell that glows at its edges, packets of
-    // light running along the filaments, a vertical HUD dial that always faces you, a radar sweep and
-    // turning segmented rings on the base, and a lens flare across the core. Beside it, a status panel
-    // (HologramHud). Below it, the name and four buttons: stop, close, Zapytaj (ask by voice), Na blat.
+    // "CardboardXR/Hologram" (rim light, travelling light along lines, stretched glints). Beside it, a status
+    // panel (HologramHud); below it, the name and four buttons: stop, close, Zapytaj, Na blat.
     public class HologramAssistant : MonoBehaviour
     {
         public const string DisplayName = "JARVIS";
@@ -35,6 +39,9 @@ namespace CardboardXR.Demos.Workspace
         static readonly Color k_Cyan = new(0.25f, 0.85f, 1f);
         static readonly Color k_Orange = new(1f, 0.55f, 0.15f);
         static readonly Color k_White = new(0.92f, 0.98f, 1f);
+        static readonly Color k_Gold = new(1f, 0.72f, 0.22f);
+        static readonly Color k_Hot = new(1f, 0.88f, 0.55f);
+        static readonly Color k_Amber = new(1f, 0.5f, 0.12f);
         static readonly int k_Intensity = Shader.PropertyToID("_Intensity");
         static readonly int k_Tint = Shader.PropertyToID("_Tint");
         static readonly int k_Warm = Shader.PropertyToID("_Warm");
@@ -63,6 +70,14 @@ namespace CardboardXR.Demos.Workspace
             public float Speed, Angle;
         }
 
+        // A bright arc sweeping round (a comet): turns about its own tilted axis, a spark at its head
+        class Comet
+        {
+            public Transform Pivot, Spin;
+            public Renderer Line, Dots;
+            public float Speed, Angle;
+        }
+
         class Wave
         {
             public Transform Transform;
@@ -83,11 +98,12 @@ namespace CardboardXR.Demos.Workspace
         readonly List<Mesh> m_Meshes = new();
 
         Transform m_Body, m_Globe, m_CoreGlow, m_DustPivot; // m_Body holds the figure (scaled); the panels stay unscaled beside it
-        Transform m_ShellPivot, m_DialPivot, m_Dial;
-        Renderer m_GlobeLines, m_Network, m_Nodes, m_CoreRenderer, m_Beam, m_Disc, m_TickRenderer, m_Dust, m_Foot;
-        Renderer m_BaseRingA, m_BaseRingB, m_BaseRingC, m_Sweep, m_ShellFaces, m_ShellEdges, m_ShellNodes, m_DialRenderer, m_Flare;
-        float m_BaseAngle, m_SweepAngle, m_PulseClock, m_DustScale = 1f;
+        Transform m_DialPivot, m_Dial, m_ShellPivotA, m_ShellPivotB;
+        Renderer m_GlobeLines, m_Glass, m_CoreRenderer, m_Beam, m_Disc, m_TickRenderer, m_Dust, m_Foot;
+        Renderer m_BaseRingA, m_BaseRingB, m_BaseRingC, m_Debris, m_Sweep, m_ShellA, m_ShellB, m_DialRenderer, m_Flare;
+        float m_BaseAngle, m_SweepAngle, m_PulseClock, m_DustScale = 1f, m_HaloScale = 1f;
         HologramHud m_Hud;
+        readonly List<Comet> m_Comets = new();
         readonly List<Ring> m_Rings = new();
         readonly Wave[] m_Waves = new Wave[3];
         int m_NextWave;
@@ -139,11 +155,12 @@ namespace CardboardXR.Demos.Workspace
 
             BuildBase();
             BuildGlobe();
-            BuildNetwork();
-            BuildShell();
+            BuildGlass();
             BuildCore();
             BuildFlare();
             BuildRings();
+            BuildAureola();
+            BuildComets();
             BuildDial();
             BuildWaves();
             BuildTicks();
@@ -201,18 +218,19 @@ namespace CardboardXR.Demos.Workspace
         void BuildBase()
         {
             BuildBaseRings();
+            BuildDebris();
             BuildSweep();
 
             // The disc: bright in the middle, gone at the rim
             var dv = new List<Vector3> { new(0f, 0.001f, 0f) };
-            var dc = new List<Color> { Alpha(k_Cyan, 0.16f) };
+            var dc = new List<Color> { Alpha(k_Gold, 0.16f) };
             var dt = new List<int>();
             const int segments = 48;
             for (int i = 0; i < segments; i++)
             {
                 float a = i * Mathf.PI * 2f / segments;
                 dv.Add(new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * k_BaseRadius + new Vector3(0f, 0.001f, 0f));
-                dc.Add(Alpha(k_Cyan, 0.03f));
+                dc.Add(Alpha(k_Gold, 0.03f));
             }
             for (int i = 0; i < segments; i++)
             {
@@ -232,9 +250,9 @@ namespace CardboardXR.Demos.Workspace
             {
                 float a = i * Mathf.PI * 2f / sides;
                 bv.Add(new Vector3(Mathf.Cos(a) * 0.07f, 0.003f, Mathf.Sin(a) * 0.07f));
-                bc.Add(Alpha(k_Cyan, 0.13f));
+                bc.Add(Alpha(k_Gold, 0.13f));
                 bv.Add(new Vector3(Mathf.Cos(a) * 0.03f, top, Mathf.Sin(a) * 0.03f));
-                bc.Add(Alpha(k_Cyan, 0f));
+                bc.Add(Alpha(k_Gold, 0f));
             }
             for (int i = 0; i < sides; i++)
             {
@@ -245,7 +263,7 @@ namespace CardboardXR.Demos.Workspace
             m_Beam = Part("Beam", m_Body, HoloMesh.Surface(bv, bc, bt, "Beam"), m_LineMaterial, Vector3.zero);
 
             var foot = HoloMesh.Dots(new List<Vector3> { new(0f, 0.01f, 0f) }, new List<float> { 0.075f },
-                new List<Color> { Alpha(k_Cyan, 0.25f) }, "Foot glow");
+                new List<Color> { Alpha(k_Gold, 0.25f) }, "Foot glow");
             m_Foot = Part("Foot Glow", m_Body, foot, m_DotMaterial, Vector3.zero);
         }
 
@@ -270,35 +288,35 @@ namespace CardboardXR.Demos.Workspace
         {
             var v = new List<Vector3>();
             var c = new List<Color>();
-            Arc(v, c, k_BaseRadius, 0f, 360f, Alpha(k_Cyan, 0.6f));
+            Arc(v, c, k_BaseRadius, 0f, 360f, Alpha(k_Gold, 0.6f));
             for (int i = 0; i < 60; i++)
             {
                 float a = i * Mathf.PI * 2f / 60f;
                 float inner = k_BaseRadius * (i % 5 == 0 ? 0.88f : 0.93f);
-                HoloMesh.Segment(v, c, Polar(k_BaseRadius * 0.97f, a), Polar(inner, a), Alpha(k_Cyan, 0.5f), Alpha(k_Cyan, 0.5f));
+                HoloMesh.Segment(v, c, Polar(k_BaseRadius * 0.97f, a), Polar(inner, a), Alpha(k_Gold, 0.5f), Alpha(k_Gold, 0.5f));
             }
-            Arc(v, c, k_BaseRadius * 1.08f, 0f, 360f, Alpha(k_Orange, 0.5f));
+            Arc(v, c, k_BaseRadius * 1.08f, 0f, 360f, Alpha(k_Amber, 0.55f));
             m_BaseRingA = Part("Base Ring A", m_Body, HoloMesh.Lines(v, c, "Base ring A"), m_LineMaterial, Vector3.zero);
 
             v = new List<Vector3>();
             c = new List<Color>();
             for (int k = 0; k < 3; k++)
             {
-                Arc(v, c, k_BaseRadius * 0.78f, k * 120f, 80f, Alpha(k_Cyan, 0.75f));
-                Arc(v, c, k_BaseRadius * 0.72f, k * 120f + 60f, 40f, Alpha(k_Cyan, 0.45f));
+                Arc(v, c, k_BaseRadius * 0.78f, k * 120f, 80f, Alpha(k_Gold, 0.75f));
+                Arc(v, c, k_BaseRadius * 0.72f, k * 120f + 60f, 40f, Alpha(k_Gold, 0.45f));
             }
-            Arc(v, c, k_BaseRadius * 0.86f, 0f, 360f, Alpha(k_Cyan, 0.18f));
+            Arc(v, c, k_BaseRadius * 0.86f, 0f, 360f, Alpha(k_Gold, 0.18f));
             m_BaseRingB = Part("Base Ring B", m_Body, HoloMesh.Lines(v, c, "Base ring B"), m_LineMaterial, Vector3.zero);
 
             v = new List<Vector3>();
             c = new List<Color>();
             for (int k = 0; k < 24; k++)
-                Arc(v, c, k_BaseRadius * 0.55f, k * 15f, 9f, Alpha(k_Cyan, 0.55f));
-            Arc(v, c, k_BaseRadius * 0.3f, 0f, 360f, Alpha(k_Cyan, 0.35f));
+                Arc(v, c, k_BaseRadius * 0.55f, k * 15f, 9f, Alpha(k_Gold, 0.55f));
+            Arc(v, c, k_BaseRadius * 0.3f, 0f, 360f, Alpha(k_Gold, 0.35f));
             for (int k = 0; k < 8; k++)
             {
                 float a = k * Mathf.PI / 4f;
-                HoloMesh.Segment(v, c, Polar(k_BaseRadius * 0.3f, a), Polar(k_BaseRadius * 0.55f, a), Alpha(k_Cyan, 0.25f), Alpha(k_Cyan, 0.25f));
+                HoloMesh.Segment(v, c, Polar(k_BaseRadius * 0.3f, a), Polar(k_BaseRadius * 0.55f, a), Alpha(k_Gold, 0.25f), Alpha(k_Gold, 0.25f));
             }
             m_BaseRingC = Part("Base Ring C", m_Body, HoloMesh.Lines(v, c, "Base ring C"), m_LineMaterial, Vector3.zero);
         }
@@ -307,14 +325,14 @@ namespace CardboardXR.Demos.Workspace
         void BuildSweep()
         {
             var v = new List<Vector3> { new(0f, 0.0025f, 0f) };
-            var c = new List<Color> { Alpha(k_Cyan, 0.05f) };
+            var c = new List<Color> { Alpha(k_Gold, 0.05f) };
             var t = new List<int>();
             const int steps = 16;
             for (int i = 0; i <= steps; i++)
             {
                 float degrees = -70f * i / steps;
                 v.Add(Polar(k_BaseRadius * 0.95f, degrees * Mathf.Deg2Rad, 0.0025f));
-                c.Add(Alpha(k_Cyan, Mathf.Lerp(0.34f, 0f, (float)i / steps)));
+                c.Add(Alpha(k_Gold, Mathf.Lerp(0.34f, 0f, (float)i / steps)));
             }
             for (int i = 0; i < steps; i++)
             {
@@ -347,121 +365,192 @@ namespace CardboardXR.Demos.Workspace
             m_GlobeLines = Part("Globe Lines", m_Globe, HoloMesh.Lines(v, c, "Globe"), m_LineMaterial, Vector3.zero);
         }
 
-        // The "brain": 230 points in two folded hemispheres inside the globe, each joined to its three
-        // nearest, as glowing filaments with a node at every point
-        void BuildNetwork()
+        // The planet's glass: a smooth ball (an icosphere of 162 corners) that is nearly clear face-on and glows
+        // at its rim (the shader's rim light), as the globe on the console does
+        void BuildGlass()
         {
-            var rnd = new System.Random(11);
-            var points = new List<Vector3>();
-            for (int i = 0; i < 230; i++)
-            {
-                float u = (float)rnd.NextDouble() * 2f - 1f, theta = (float)rnd.NextDouble() * Mathf.PI * 2f;
-                float s = Mathf.Sqrt(1f - u * u);
-                var d = new Vector3(s * Mathf.Cos(theta), u, s * Mathf.Sin(theta));
-                float rho = k_Radius * Mathf.Lerp(0.5f, 0.96f, Mathf.Sqrt((float)rnd.NextDouble()));
-                var p = new Vector3(d.x, d.y * 0.85f, d.z * 1.08f) * rho;
-                // The fissure between the hemispheres, and folds
-                p.x += Mathf.Sign(p.x) * k_Radius * 0.07f * Mathf.Exp(-Mathf.Pow(p.x / (k_Radius * 0.25f), 2f));
-                p *= 1f + 0.07f * Mathf.Sin(d.y * 9f + d.x * 7f) * Mathf.Cos(d.z * 8f);
-                points.Add(p);
-            }
+            HoloMesh.Icosphere(2, out var corners, out var triangles);
             var v = new List<Vector3>();
             var c = new List<Color>();
-            var uvs = new List<Vector2>(); // along the line, and the phase of its travelling light (Hologram.shader)
-            var seen = new HashSet<long>();
-            var near = new List<(float distance, int index)>();
-            for (int i = 0; i < points.Count; i++)
+            foreach (var corner in corners)
             {
-                near.Clear();
-                for (int j = 0; j < points.Count; j++)
-                {
-                    if (j != i)
-                        near.Add(((points[i] - points[j]).sqrMagnitude, j));
-                }
-                near.Sort((a, b) => a.distance.CompareTo(b.distance));
-                for (int n = 0; n < 3; n++)
-                {
-                    int j = near[n].index;
-                    long key = i < j ? (long)i * 1000 + j : (long)j * 1000 + i;
-                    if (!seen.Add(key))
-                        continue;
-                    var color = rnd.NextDouble() < 0.14 ? k_Orange : k_Cyan;
-                    float alpha = Mathf.Lerp(0.25f, 0.6f, (float)rnd.NextDouble());
-                    HoloMesh.Segment(v, c, points[i], points[j], Alpha(color, alpha), Alpha(color, alpha * 0.3f));
-                    float phase = (float)rnd.NextDouble();
-                    uvs.Add(new Vector2(0f, phase));
-                    uvs.Add(new Vector2(1f, phase));
-                }
+                v.Add(corner * k_Radius * 1.02f);
+                c.Add(Alpha(k_Cyan, 0.16f));
             }
-            m_Network = Part("Filaments", m_Globe, HoloMesh.Lines(v, c, "Filaments", uvs), m_LineMaterial, Vector3.zero);
-
-            var sizes = new List<float>();
-            var colors = new List<Color>();
-            foreach (var _ in points)
-            {
-                bool warm = rnd.NextDouble() < 0.12;
-                sizes.Add(Mathf.Lerp(0.0013f, 0.0032f, (float)rnd.NextDouble()));
-                colors.Add(Alpha(warm ? k_Orange : k_White, warm ? 0.9f : 0.7f));
-            }
-            m_Nodes = Part("Nodes", m_Globe, HoloMesh.Dots(points, sizes, colors, "Nodes"), m_DotMaterial, Vector3.zero);
+            var mesh = HoloMesh.Surface(v, c, triangles, "Glass");
+            mesh.RecalculateNormals(); // shared corners: smooth, so the rim glows evenly
+            m_Glass = Part("Glass", m_Globe, mesh, m_ShellMaterial, Vector3.zero);
         }
 
-        // A crystal shell just outside the globe: an icosphere of 80 facets with its corners pushed in and out
-        // so it looks cut, faint plates that glow at their edges (the shader's rim light) with bright edges and
-        // corners; it turns the other way to the globe
-        void BuildShell()
+        // ---- The golden halo, made of fragments like the film's ----
+
+        static Vector3 OnSphere(float latitude, float longitude, float radius) =>
+            new(Mathf.Cos(latitude) * Mathf.Cos(longitude) * radius, Mathf.Sin(latitude) * radius, Mathf.Cos(latitude) * Mathf.Sin(longitude) * radius);
+
+        static Color FragmentColor(System.Random rnd, float alpha)
         {
-            m_ShellPivot = new GameObject("Shell").transform;
-            m_ShellPivot.SetParent(m_Body, false);
-            m_ShellPivot.localPosition = new Vector3(0f, k_Height, 0f);
-            HoloMesh.Icosphere(1, out var corners, out var triangles);
-            var rnd = new System.Random(3);
-            for (int i = 0; i < corners.Count; i++)
-                corners[i] *= k_Radius * 1.27f * (0.9f + 0.2f * (float)rnd.NextDouble());
+            double pick = rnd.NextDouble();
+            var color = pick < 0.12 ? k_Hot : pick < 0.35 ? k_Amber : k_Gold;
+            return Alpha(color, alpha);
+        }
 
-            var fv = new List<Vector3>();
-            var fc = new List<Color>();
-            var ft = new List<int>();
-            for (int i = 0; i < triangles.Count; i++)
+        // Circuit-like fragments on a sphere: short runs that walk along the latitude / longitude grid, turning
+        // by right angles, each at its own brightness (a few very bright) and, in UV, its own phase for the
+        // shader's travelling light. Radii spread a little, so the shell has depth
+        static void SphereFragments(List<Vector3> v, List<Color> c, List<Vector2> uvs, System.Random rnd, int count, float radius)
+        {
+            for (int f = 0; f < count; f++)
             {
-                fv.Add(corners[triangles[i]]);
-                fc.Add(Alpha(k_Cyan, 0.09f));
-                ft.Add(i);
-            }
-            var faces = HoloMesh.Surface(fv, fc, ft, "Shell facets");
-            faces.RecalculateNormals(); // unshared corners: each facet its own normal, so each glows on its own
-            m_ShellFaces = Part("Shell Facets", m_ShellPivot, faces, m_ShellMaterial, Vector3.zero);
-
-            var ev = new List<Vector3>();
-            var ec = new List<Color>();
-            var seen = new HashSet<long>();
-            for (int i = 0; i < triangles.Count; i += 3)
-            {
-                for (int e = 0; e < 3; e++)
+                float latitude = Mathf.Asin((float)rnd.NextDouble() * 2f - 1f), longitude = (float)rnd.NextDouble() * Mathf.PI * 2f;
+                float r = radius * (0.94f + 0.12f * (float)rnd.NextDouble());
+                float brightness = Mathf.Lerp(0.15f, 1f, Mathf.Pow((float)rnd.NextDouble(), 2f));
+                float phase = (float)rnd.NextDouble();
+                int steps = 2 + rnd.Next(4), direction = rnd.Next(4);
+                var previous = OnSphere(latitude, longitude, r);
+                for (int s = 0; s < steps; s++)
                 {
-                    int a = triangles[i + e], b = triangles[i + (e + 1) % 3];
-                    long key = a < b ? (long)a * 1000 + b : (long)b * 1000 + a;
-                    if (seen.Add(key))
-                        HoloMesh.Segment(ev, ec, corners[a], corners[b], Alpha(k_Cyan, 0.42f), Alpha(k_White, 0.42f));
+                    if (rnd.NextDouble() < 0.4)
+                        direction = (direction + (rnd.Next(2) == 0 ? 1 : 3)) % 4; // a right-angle turn
+                    float step = Mathf.Lerp(0.02f, 0.08f, (float)rnd.NextDouble());
+                    switch (direction)
+                    {
+                        case 0: longitude += step / Mathf.Max(Mathf.Cos(latitude), 0.25f); break;
+                        case 1: latitude = Mathf.Min(latitude + step, 1.35f); break;
+                        case 2: longitude -= step / Mathf.Max(Mathf.Cos(latitude), 0.25f); break;
+                        default: latitude = Mathf.Max(latitude - step, -1.35f); break;
+                    }
+                    var next = OnSphere(latitude, longitude, r);
+                    float fade = 1f - s * 0.12f;
+                    var color = FragmentColor(rnd, brightness * fade);
+                    HoloMesh.Segment(v, c, previous, next, color, Alpha(color, color.a * 0.85f));
+                    uvs.Add(new Vector2(0f, phase + 0.13f * s));
+                    uvs.Add(new Vector2(1f, phase + 0.13f * s));
+                    previous = next;
                 }
             }
-            m_ShellEdges = Part("Shell Edges", m_ShellPivot, HoloMesh.Lines(ev, ec, "Shell edges"), m_LineMaterial, Vector3.zero);
+        }
 
-            var sizes = new List<float>();
-            var colors = new List<Color>();
-            foreach (var _ in corners)
+        // Two shells of fragments round the planet, tilted and turning against each other
+        void BuildAureola()
+        {
+            var rnd = new System.Random(21);
+            for (int i = 0; i < 2; i++)
             {
-                sizes.Add(0.0028f);
-                colors.Add(Alpha(k_White, 0.95f));
+                var pivot = new GameObject(i == 0 ? "Halo A" : "Halo B").transform;
+                pivot.SetParent(m_Body, false);
+                pivot.localPosition = new Vector3(0f, k_Height, 0f);
+                var v = new List<Vector3>();
+                var c = new List<Color>();
+                var uvs = new List<Vector2>();
+                SphereFragments(v, c, uvs, rnd, i == 0 ? 430 : 350, k_Radius * (i == 0 ? 1.55f : 1.85f));
+                var renderer = Part(pivot.name, pivot, HoloMesh.Lines(v, c, "Halo", uvs), m_LineMaterial, Vector3.zero);
+                if (i == 0) { m_ShellPivotA = pivot; m_ShellA = renderer; }
+                else { m_ShellPivotB = pivot; m_ShellB = renderer; }
             }
-            m_ShellNodes = Part("Shell Corners", m_ShellPivot, HoloMesh.Dots(corners, sizes, colors, "Shell corners"), m_DotMaterial, Vector3.zero);
+        }
+
+        // Bright arcs sweeping round the planet like comets: a long arc that grows brighter towards its head
+        // (three thin arcs side by side, so it has some body), a white-hot spark with a glow at the head, and a
+        // few specks along the tail. Each turns about its own tilted axis at its own speed
+        void BuildComets()
+        {
+            // radius (planet radii), span (degrees), tilt, speed (degrees per second)
+            var specs = new (float radius, float span, Vector3 tilt, float speed)[]
+            {
+                (1.30f, 210f, new Vector3(20f, 0f, 35f), 46f),
+                (1.45f, 160f, new Vector3(-50f, 0f, 10f), -38f),
+                (1.60f, 250f, new Vector3(75f, 0f, -20f), 29f),
+                (1.75f, 190f, new Vector3(10f, 0f, -60f), -52f),
+                (1.90f, 230f, new Vector3(-30f, 0f, 70f), 24f),
+                (2.05f, 140f, new Vector3(60f, 0f, 45f), -33f),
+            };
+            var rnd = new System.Random(8);
+            foreach (var spec in specs)
+            {
+                var comet = new Comet { Speed = spec.speed };
+                comet.Pivot = new GameObject("Comet").transform;
+                comet.Pivot.SetParent(m_Body, false);
+                comet.Pivot.localPosition = new Vector3(0f, k_Height, 0f);
+                comet.Pivot.localRotation = Quaternion.Euler(spec.tilt);
+                comet.Spin = new GameObject("Spin").transform;
+                comet.Spin.SetParent(comet.Pivot, false);
+
+                float radius = k_Radius * spec.radius;
+                var v = new List<Vector3>();
+                var c = new List<Color>();
+                const int steps = 48;
+                foreach (float offset in new[] { -0.0012f, 0f, 0.0012f })
+                {
+                    var previous = Polar(radius + offset, 0f, 0f);
+                    for (int i = 1; i <= steps; i++)
+                    {
+                        float t = i / (float)steps;
+                        var next = Polar(radius + offset, spec.span * t * Mathf.Deg2Rad, 0f);
+                        float alpha = Mathf.Pow(t, 2.2f) * (offset == 0f ? 0.95f : 0.55f);
+                        var color = Color.Lerp(k_Gold, k_Hot, t);
+                        HoloMesh.Segment(v, c, previous, next, Alpha(color, alpha * 0.85f), Alpha(color, alpha));
+                        previous = next;
+                    }
+                }
+                comet.Line = Part("Comet Arc", comet.Spin, HoloMesh.Lines(v, c, "Comet arc"), m_LineMaterial, Vector3.zero);
+
+                var head = Polar(radius, spec.span * Mathf.Deg2Rad, 0f);
+                var centers = new List<Vector3> { head, head };
+                var sizes = new List<float> { 0.0065f, 0.02f };
+                var colors = new List<Color> { Alpha(k_White, 1f), Alpha(k_Gold, 0.45f) };
+                for (int i = 0; i < 6; i++) // specks along the tail
+                {
+                    centers.Add(Polar(radius, spec.span * (0.35f + 0.6f * (float)rnd.NextDouble()) * Mathf.Deg2Rad, 0f));
+                    sizes.Add(Mathf.Lerp(0.001f, 0.002f, (float)rnd.NextDouble()));
+                    colors.Add(Alpha(k_Hot, 0.7f));
+                }
+                comet.Dots = Part("Comet Head", comet.Spin, HoloMesh.Dots(centers, sizes, colors, "Comet head"), m_DotMaterial, Vector3.zero);
+                m_Comets.Add(comet);
+            }
+        }
+
+        // The floor of the base: circuit-like fragments on a polar grid, runs along a ring or across rings,
+        // turning by right angles
+        void BuildDebris()
+        {
+            var rnd = new System.Random(34);
+            var v = new List<Vector3>();
+            var c = new List<Color>();
+            var uvs = new List<Vector2>();
+            for (int f = 0; f < 150; f++)
+            {
+                int ring = rnd.Next(7);
+                float angle = (float)rnd.NextDouble() * Mathf.PI * 2f;
+                float brightness = Mathf.Lerp(0.15f, 0.9f, Mathf.Pow((float)rnd.NextDouble(), 2f));
+                float phase = (float)rnd.NextDouble();
+                bool along = rnd.Next(2) == 0;
+                int sign = rnd.Next(2) == 0 ? 1 : -1;
+                var previous = Polar(k_BaseRadius * (0.36f + ring * 0.085f), angle, 0.003f);
+                int steps = 2 + rnd.Next(4);
+                for (int s = 0; s < steps; s++)
+                {
+                    if (rnd.NextDouble() < 0.45)
+                        along = !along;
+                    if (along)
+                        angle += sign * Mathf.Lerp(0.06f, 0.22f, (float)rnd.NextDouble());
+                    else
+                        ring = Mathf.Clamp(ring + (rnd.Next(2) == 0 ? 1 : -1), 0, 6);
+                    var next = Polar(k_BaseRadius * (0.36f + ring * 0.085f), angle, 0.003f);
+                    var color = FragmentColor(rnd, brightness * (1f - s * 0.1f));
+                    HoloMesh.Segment(v, c, previous, next, color, color);
+                    uvs.Add(new Vector2(0f, phase + 0.13f * s));
+                    uvs.Add(new Vector2(1f, phase + 0.13f * s));
+                    previous = next;
+                }
+            }
+            m_Debris = Part("Base Debris", m_Body, HoloMesh.Lines(v, c, "Base debris", uvs), m_LineMaterial, Vector3.zero);
         }
 
         // A lens flare across the core: a long horizontal streak, a short upright one and a thin warm one
         void BuildFlare()
         {
             var zero = new List<Vector3> { Vector3.zero, Vector3.zero, Vector3.zero };
-            var colors = new List<Color> { Alpha(k_White, 0.5f), Alpha(k_Cyan, 0.3f), Alpha(k_Orange, 0.6f) };
+            var colors = new List<Color> { Alpha(k_Hot, 0.5f), Alpha(k_Gold, 0.3f), Alpha(k_Amber, 0.6f) };
             var stretch = new List<Vector2> { new(0.17f, 0.0035f), new(0.0035f, 0.07f), new(0.05f, 0.0025f) };
             m_Flare = Part("Flare", m_Body, HoloMesh.Dots(zero, null, colors, "Flare", stretch), m_DotMaterial, new Vector3(0f, k_Height, 0f));
         }
@@ -480,30 +569,32 @@ namespace CardboardXR.Demos.Workspace
             var c = new List<Color>();
             Vector3 On(float r, float degrees) => new(Mathf.Cos(degrees * Mathf.Deg2Rad) * r, Mathf.Sin(degrees * Mathf.Deg2Rad) * r, 0f);
             for (int i = 0; i < 360; i += 3)
-                HoloMesh.Segment(v, c, On(radius, i), On(radius, i + 3), Alpha(k_Cyan, 0.4f), Alpha(k_Cyan, 0.4f));
+                HoloMesh.Segment(v, c, On(radius, i), On(radius, i + 3), Alpha(k_Gold, 0.4f), Alpha(k_Gold, 0.4f));
             for (int i = 0; i < 120; i++)
             {
                 float length = i % 10 == 0 ? 0.034f : i % 5 == 0 ? 0.024f : 0.012f;
-                HoloMesh.Segment(v, c, On(radius, i * 3f), On(radius - length, i * 3f), Alpha(k_Cyan, 0.5f), Alpha(k_Cyan, 0.5f));
+                HoloMesh.Segment(v, c, On(radius, i * 3f), On(radius - length, i * 3f), Alpha(k_Gold, 0.5f), Alpha(k_Gold, 0.5f));
             }
             for (int layer = 0; layer < 3; layer++) // a gauge's fill: a thick orange arc
             {
                 float r = radius * (0.955f - layer * 0.006f);
                 for (int i = -30; i < 95; i += 3)
-                    HoloMesh.Segment(v, c, On(r, i), On(r, i + 3), Alpha(k_Orange, 0.9f), Alpha(k_Orange, 0.9f));
+                    HoloMesh.Segment(v, c, On(r, i), On(r, i + 3), Alpha(k_Amber, 0.9f), Alpha(k_Amber, 0.9f));
             }
             for (int i = 110; i < 310; i += 3)
-                HoloMesh.Segment(v, c, On(radius * 0.9f, i), On(radius * 0.9f, i + 3), Alpha(k_Cyan, 0.45f), Alpha(k_Cyan, 0.45f));
+                HoloMesh.Segment(v, c, On(radius * 0.9f, i), On(radius * 0.9f, i + 3), Alpha(k_Gold, 0.45f), Alpha(k_Gold, 0.45f));
             m_DialRenderer = Part("Dial Lines", m_Dial, HoloMesh.Lines(v, c, "Dial"), m_LineMaterial, Vector3.zero);
         }
 
-        // The glowing core: a wide warm halo, a hot middle and a white point
+        // The planet's glow, as on the console: a wide soft orange light filling the ball, a hotter middle, a
+        // white heart, and a small cool highlight off to one side for depth
         void BuildCore()
         {
             var mesh = HoloMesh.Dots(
-                new List<Vector3> { Vector3.zero, Vector3.zero, Vector3.zero },
-                new List<float> { 0.055f, 0.028f, 0.011f },
-                new List<Color> { Alpha(k_Orange, 0.42f), Alpha(new Color(1f, 0.75f, 0.35f), 0.8f), Alpha(Color.white, 1f) }, "Core");
+                new List<Vector3> { Vector3.zero, Vector3.zero, Vector3.zero, new(-0.026f, 0.03f, 0.02f) },
+                new List<float> { 0.09f, 0.052f, 0.022f, 0.035f },
+                new List<Color> { Alpha(k_Orange, 0.36f), Alpha(new Color(1f, 0.75f, 0.35f), 0.62f), Alpha(Color.white, 1f), Alpha(k_Cyan, 0.22f) },
+                "Core");
             m_CoreRenderer = Part("Core", m_Body, mesh, m_DotMaterial, new Vector3(0f, k_Height, 0f));
             m_CoreGlow = m_CoreRenderer.transform;
         }
@@ -545,9 +636,9 @@ namespace CardboardXR.Demos.Workspace
         {
             var v = new List<Vector3>();
             var c = new List<Color>();
-            HoloMesh.Loop(v, c, 64, a => new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * k_Radius, Alpha(k_Cyan, 0.8f));
-            HoloMesh.Loop(v, c, 64, a => new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * k_Radius, Alpha(k_Cyan, 0.5f));
-            HoloMesh.Loop(v, c, 64, a => new Vector3(0f, Mathf.Cos(a), Mathf.Sin(a)) * k_Radius, Alpha(k_Cyan, 0.5f));
+            HoloMesh.Loop(v, c, 64, a => new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * k_Radius, Alpha(k_Gold, 0.8f));
+            HoloMesh.Loop(v, c, 64, a => new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * k_Radius, Alpha(k_Gold, 0.5f));
+            HoloMesh.Loop(v, c, 64, a => new Vector3(0f, Mathf.Cos(a), Mathf.Sin(a)) * k_Radius, Alpha(k_Gold, 0.5f));
             for (int i = 0; i < m_Waves.Length; i++)
             {
                 var wave = new Wave();
@@ -571,8 +662,8 @@ namespace CardboardXR.Demos.Workspace
                 var p = new Vector3(Mathf.Cos(a) * radius, 0.002f, Mathf.Sin(a) * radius);
                 m_TickVertices[2 * i] = p;
                 m_TickVertices[2 * i + 1] = p + Vector3.up * 0.004f;
-                colors.Add(Alpha(k_Orange, 0.95f));
-                colors.Add(Alpha(new Color(1f, 0.75f, 0.35f), 0.25f));
+                colors.Add(Alpha(k_Gold, 0.95f));
+                colors.Add(Alpha(k_Hot, 0.25f));
                 indices[2 * i] = 2 * i;
                 indices[2 * i + 1] = 2 * i + 1;
             }
@@ -594,7 +685,7 @@ namespace CardboardXR.Demos.Workspace
             var centers = new List<Vector3>();
             var sizes = new List<float>();
             var colors = new List<Color>();
-            for (int i = 0; i < 120; i++)
+            for (int i = 0; i < 220; i++)
             {
                 Vector3 p;
                 do
@@ -606,7 +697,7 @@ namespace CardboardXR.Demos.Workspace
                 centers.Add(p);
                 sizes.Add(Mathf.Lerp(0.0008f, 0.0022f, (float)rnd.NextDouble()));
                 bool warm = rnd.NextDouble() < 0.25;
-                colors.Add(Alpha(warm ? k_Orange : k_White, Mathf.Lerp(0.25f, 0.8f, (float)rnd.NextDouble())));
+                colors.Add(Alpha(warm ? k_Amber : k_Hot, Mathf.Lerp(0.3f, 0.95f, (float)rnd.NextDouble())));
             }
             m_Dust = Part("Dust Specks", m_DustPivot, HoloMesh.Dots(centers, sizes, colors, "Dust"), m_DotMaterial, Vector3.zero);
         }
@@ -739,21 +830,20 @@ namespace CardboardXR.Demos.Workspace
             m_PreviousState = state;
 
             float spin, ringSpin, ringScale, glow;
-            Color tint;
+            Color tint = Color.white;
             switch (state)
             {
                 case AssistantState.Listening:
-                    spin = 16f; ringSpin = 60f; ringScale = 0.8f; glow = 0.95f; tint = new Color(0.85f, 1f, 1f);
+                    spin = 16f; ringSpin = 60f; ringScale = 0.8f; glow = 0.95f;
                     break;
                 case AssistantState.Thinking:
                     spin = 70f; ringSpin = 170f; ringScale = 1.08f + 0.06f * Mathf.Sin(now * 9f); glow = 0.9f + 0.15f * Mathf.Sin(now * 23f);
-                    tint = Color.white;
                     break;
                 case AssistantState.Speaking:
-                    spin = 20f; ringSpin = 70f; ringScale = 1f + 0.08f * level; glow = 0.75f + 0.5f * level; tint = Color.white;
+                    spin = 20f; ringSpin = 70f; ringScale = 1f + 0.08f * level; glow = 0.75f + 0.5f * level;
                     break;
                 default:
-                    spin = 8f; ringSpin = 22f; ringScale = 1f; glow = 0.6f + 0.05f * Mathf.Sin(now * 1.3f); tint = Color.white;
+                    spin = 8f; ringSpin = 22f; ringScale = 1f; glow = 0.6f + 0.05f * Mathf.Sin(now * 1.3f);
                     break;
             }
             float k = 1f - Mathf.Exp(-4f * dt);
@@ -763,11 +853,14 @@ namespace CardboardXR.Demos.Workspace
             m_Glow = Mathf.Lerp(m_Glow, glow, 1f - Mathf.Exp(-9f * dt));
             m_Tint = Color.Lerp(m_Tint, tint, k);
             m_Warm = Mathf.Lerp(m_Warm, state == AssistantState.Thinking ? 0.75f : 0f, k);
+            float busy = state == AssistantState.Thinking ? 3f : state == AssistantState.Listening ? 2.2f : 1f;
 
-            // The globe and its filaments turn, tilted; the brain breathes with the voice
+            // The planet: the globe turns about its tilted axis and breathes with the voice
             m_GlobeAngle += m_Spin * dt;
             m_Globe.localRotation = Quaternion.Euler(0f, 0f, 18f) * Quaternion.Euler(0f, m_GlobeAngle, 0f);
             m_Globe.localScale = Vector3.one * (1f + 0.04f * level);
+            Look(m_GlobeLines, m_Glow, m_Tint);
+            Look(m_Glass, m_Glow * (1f + 0.8f * level), m_Tint);
             foreach (var ring in m_Rings)
             {
                 ring.Angle += ring.Speed * (m_RingSpin / 22f) * dt;
@@ -776,56 +869,68 @@ namespace CardboardXR.Demos.Workspace
                 Look(ring.Line, m_Glow, m_Tint);
                 Look(ring.Dots, m_Glow * 1.2f, m_Tint);
             }
-            Look(m_GlobeLines, m_Glow, m_Tint);
-            Look(m_Network, m_Glow * (0.8f + 0.6f * level), m_Tint);
-            Look(m_Nodes, m_Glow * (0.9f + 0.7f * level), m_Tint);
-            Look(m_Disc, m_Glow * (0.9f + 0.5f * level), m_Tint);
-            Look(m_Beam, m_Glow * (0.9f + 0.6f * level), m_Tint);
-            Look(m_Foot, m_Glow * (0.8f + 1f * level), m_Tint);
-            Look(m_Dust, 0.8f, m_Tint);
-            m_DustPivot.localRotation = Quaternion.Euler(0f, now * 3f, 0f);
 
-            // The core: swells with each word, flickers while thinking
+            // The core swells with each word and flickers while thinking; the flare crosses it
             float coreScale = 1f + 0.7f * level + 0.05f * Mathf.Sin(now * 2f) + (state == AssistantState.Thinking ? 0.12f * Mathf.Sin(now * 20f) : 0f);
             m_CoreGlow.localScale = Vector3.one * coreScale;
             Look(m_CoreRenderer, 0.7f + 0.8f * level + (state == AssistantState.Listening ? 0.4f : 0f), Color.white, 0f);
-
-            // The base: its rings turn against each other and a radar sweep goes round (faster when busy)
-            float busy = state == AssistantState.Thinking ? 3f : state == AssistantState.Listening ? 2.2f : 1f;
-            m_BaseAngle += dt * busy;
-            m_SweepAngle += dt * 70f * busy;
-            m_BaseRingB.transform.localRotation = Quaternion.Euler(0f, m_BaseAngle * 18f, 0f);
-            m_BaseRingC.transform.localRotation = Quaternion.Euler(0f, -m_BaseAngle * 30f, 0f);
-            m_Sweep.transform.localRotation = Quaternion.Euler(0f, m_SweepAngle, 0f);
-            Look(m_BaseRingA, m_Glow, m_Tint);
-            Look(m_BaseRingB, m_Glow, m_Tint);
-            Look(m_BaseRingC, m_Glow, m_Tint);
-            Look(m_Sweep, m_Glow * (state == AssistantState.Idle ? 0.7f : 1.4f), m_Tint);
-
-            // The crystal shell, the dial and the flare
-            m_ShellPivot.localRotation = Quaternion.Euler(12f, -m_GlobeAngle * 0.6f, 0f);
-            Look(m_ShellFaces, m_Glow * (1f + level), m_Tint);
-            Look(m_ShellEdges, m_Glow * (0.8f + 0.6f * level), m_Tint);
-            Look(m_ShellNodes, m_Glow * (0.9f + 0.8f * level), m_Tint);
-            m_Dial.localRotation = Quaternion.Euler(0f, 0f, now * 5f * busy);
-            Look(m_DialRenderer, m_Glow * 0.9f, m_Tint);
             Look(m_Flare, 0.3f + 0.9f * level + (state == AssistantState.Thinking ? 0.25f + 0.2f * Mathf.Sin(now * 17f) : 0f)
                 + (state == AssistantState.Listening ? 0.3f : 0f), Color.white, 0f);
 
-            // Light running along the filaments: slow at rest, quick while thinking, in time with the voice
+            // The halo: two shells of fragments turning against each other, drawing in while it listens and
+            // swelling with the voice; light runs along the fragments (slow at rest, quick while thinking)
+            m_HaloScale = Mathf.Lerp(m_HaloScale, state == AssistantState.Listening ? 0.88f : 1f + 0.07f * level, k);
+            m_ShellPivotA.localRotation = Quaternion.Euler(22f, m_GlobeAngle * 0.5f, 8f);
+            m_ShellPivotB.localRotation = Quaternion.Euler(-28f, -m_GlobeAngle * 0.35f, -12f);
+            m_ShellPivotA.localScale = Vector3.one * m_HaloScale;
+            m_ShellPivotB.localScale = Vector3.one * m_HaloScale;
             float pulse = state == AssistantState.Thinking ? 1f : state == AssistantState.Speaking ? 0.5f + 0.5f * level
                 : state == AssistantState.Listening ? 0.6f : 0.35f;
             float pulseSpeed = state == AssistantState.Thinking ? 0.9f : state == AssistantState.Speaking ? 0.3f + 0.5f * level
                 : state == AssistantState.Listening ? 0.2f : 0.1f;
             m_PulseClock += dt * pulseSpeed;
-            m_Network.GetPropertyBlock(m_Block);
-            m_Block.SetFloat(k_Pulse, pulse);
-            m_Block.SetFloat(k_PulseTime, m_PulseClock);
-            m_Network.SetPropertyBlock(m_Block);
+            foreach (var renderer in new[] { m_ShellA, m_ShellB, m_Debris })
+            {
+                Look(renderer, m_Glow * (0.85f + 0.5f * level), m_Tint);
+                renderer.GetPropertyBlock(m_Block);
+                m_Block.SetFloat(k_Pulse, pulse);
+                m_Block.SetFloat(k_PulseTime, m_PulseClock);
+                renderer.SetPropertyBlock(m_Block);
+            }
 
-            // The specks are drawn in while it thinks
+            // The comets sweep round
+            foreach (var comet in m_Comets)
+            {
+                comet.Angle += comet.Speed * busy * dt;
+                comet.Spin.localRotation = Quaternion.Euler(0f, comet.Angle, 0f);
+                Look(comet.Line, m_Glow * (0.9f + 0.5f * level), m_Tint);
+                Look(comet.Dots, m_Glow * (1f + 0.6f * level), m_Tint);
+            }
+
+            // The thin gauge ring round it all
+            m_Dial.localRotation = Quaternion.Euler(0f, 0f, now * 5f * busy);
+            Look(m_DialRenderer, m_Glow * 0.9f, m_Tint);
+
+            // The base: rings and the floor of fragments turn against each other and a radar sweep goes round
+            m_BaseAngle += dt * busy;
+            m_SweepAngle += dt * 70f * busy;
+            m_BaseRingB.transform.localRotation = Quaternion.Euler(0f, m_BaseAngle * 18f, 0f);
+            m_BaseRingC.transform.localRotation = Quaternion.Euler(0f, -m_BaseAngle * 30f, 0f);
+            m_Debris.transform.localRotation = Quaternion.Euler(0f, -m_BaseAngle * 9f, 0f);
+            m_Sweep.transform.localRotation = Quaternion.Euler(0f, m_SweepAngle, 0f);
+            Look(m_BaseRingA, m_Glow, m_Tint);
+            Look(m_BaseRingB, m_Glow, m_Tint);
+            Look(m_BaseRingC, m_Glow, m_Tint);
+            Look(m_Sweep, m_Glow * (state == AssistantState.Idle ? 0.7f : 1.4f), m_Tint);
+            Look(m_Disc, m_Glow * (0.9f + 0.5f * level), m_Tint);
+            Look(m_Beam, m_Glow * (0.9f + 0.6f * level), m_Tint);
+            Look(m_Foot, m_Glow * (0.8f + 1f * level), m_Tint);
+
+            // Golden sparks drifting in the halo, drawn in while it thinks
             m_DustScale = Mathf.Lerp(m_DustScale, state == AssistantState.Thinking ? 0.8f + 0.2f * Mathf.Sin(now * 3f) : 1f, k);
             m_DustPivot.localScale = Vector3.one * m_DustScale;
+            m_DustPivot.localRotation = Quaternion.Euler(0f, now * 3f, 0f);
+            Look(m_Dust, 0.9f, m_Tint);
 
             // The equalizer
             float lift = 0.006f + 0.05f * level + (state == AssistantState.Listening ? 0.012f : 0f);
@@ -840,7 +945,7 @@ namespace CardboardXR.Demos.Workspace
             m_TickMesh.SetVertices(m_TickVertices);
             Look(m_TickRenderer, 0.9f + 0.6f * level, Color.white, 0f);
 
-            // Rings of light leaving the globe
+            // Rings of light leaving the planet
             foreach (var wave in m_Waves)
             {
                 if (!wave.Renderer.enabled)
