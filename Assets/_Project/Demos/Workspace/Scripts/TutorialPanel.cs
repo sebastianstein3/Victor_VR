@@ -57,7 +57,7 @@ namespace CardboardXR.Demos.Workspace
             "Głos: „zamknij”, „przenieś” i „upuść”. <b>Wyśrodkuj</b> ustawia wszystko przed Tobą.",
 
             "<b>Więcej: narzędzia</b>\n\n" +
-            "Przycisk <b>Więcej</b> w docku: asystent AI, galeria, filmy, widżety, napisy, układy, gry, rysowanie, PDF, " +
+            "Przycisk <b>Więcej</b> w docku: asystent AI, hologram, galeria, filmy, widżety, napisy, układy, gry, rysowanie, PDF, " +
             "zdjęcia 3D, środowiska, modele 3D, pliki, zrzut ekranu.\n" +
             "<b>Pliki (iCloud)</b>: połącz raz folder z iCloud Drive, potem kopiujesz pliki w goglach. " +
             "Albo Finder (iPhone > Pliki): <b>PDF</b>, <b>Filmy</b>, <b>Srodowiska</b>, <b>Modele</b>, <b>Przestrzenne</b>.\n" +

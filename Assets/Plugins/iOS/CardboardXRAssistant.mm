@@ -1,10 +1,14 @@
-// The Workspace's AI assistant (AssistantView.cs):
+// The Workspace's AI assistant (AssistantSession.cs):
 //  * the Claude API key kept in the iOS Keychain (this device only, readable after the first unlock),
 //    never in a file or the app's settings;
-//  * answers read aloud with AVSpeechSynthesizer (Polish or English voice), through the AirPods.
+//  * answers read aloud with AVSpeechSynthesizer (Polish or English voice), through the AirPods. While it
+//    speaks, "start", "word:<location>:<length>" (the UTF-16 range of the word now spoken in the text) and
+//    "end" go to the GameObject "AssistantNative" (OnSpeech), so the hologram can pulse with each word.
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #import <AVFoundation/AVFoundation.h>
+
+extern "C" void UnitySendMessage(const char* obj, const char* method, const char* msg);
 
 static NSString* const kService = @"CardboardXR.Assistant";
 
@@ -53,6 +57,38 @@ extern "C" void CardboardXR_KeychainDelete(const char* account)
 
 static AVSpeechSynthesizer* s_Synth;
 
+static void SendSpeech(NSString* message)
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UnitySendMessage("AssistantNative", "OnSpeech", message.UTF8String);
+    });
+}
+
+@interface CXRSpeechDelegate : NSObject <AVSpeechSynthesizerDelegate>
+@end
+
+@implementation CXRSpeechDelegate
+- (void)speechSynthesizer:(AVSpeechSynthesizer*)synthesizer didStartSpeechUtterance:(AVSpeechUtterance*)utterance
+{
+    SendSpeech(@"start");
+}
+- (void)speechSynthesizer:(AVSpeechSynthesizer*)synthesizer didFinishSpeechUtterance:(AVSpeechUtterance*)utterance
+{
+    SendSpeech(@"end");
+}
+- (void)speechSynthesizer:(AVSpeechSynthesizer*)synthesizer didCancelSpeechUtterance:(AVSpeechUtterance*)utterance
+{
+    SendSpeech(@"end");
+}
+- (void)speechSynthesizer:(AVSpeechSynthesizer*)synthesizer willSpeakRangeOfSpeechString:(NSRange)range
+                utterance:(AVSpeechUtterance*)utterance
+{
+    SendSpeech([NSString stringWithFormat:@"word:%lu:%lu", (unsigned long)range.location, (unsigned long)range.length]);
+}
+@end
+
+static CXRSpeechDelegate* s_SpeechDelegate; // the synthesizer holds its delegate weakly
+
 extern "C" void CardboardXR_Speak(const char* text, const char* language)
 {
     if (!text)
@@ -61,7 +97,11 @@ extern "C" void CardboardXR_Speak(const char* text, const char* language)
     NSString* lang = language ? [NSString stringWithUTF8String:language] : @"pl-PL";
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!s_Synth)
+        {
             s_Synth = [AVSpeechSynthesizer new];
+            s_SpeechDelegate = [CXRSpeechDelegate new];
+            s_Synth.delegate = s_SpeechDelegate;
+        }
         [s_Synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
         AVSpeechUtterance* utterance = [AVSpeechUtterance speechUtteranceWithString:words];
         utterance.voice = [AVSpeechSynthesisVoice voiceWithLanguage:lang];

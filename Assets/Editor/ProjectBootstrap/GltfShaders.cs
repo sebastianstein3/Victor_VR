@@ -10,7 +10,8 @@ namespace ProjectBootstrap
     // glTFast (the Workspace's 3D models) makes materials at runtime from its own shader graphs, which a
     // build leaves out unless something references them, so models show pink. When the package is
     // installed, this adds its shaders to Graphics Settings > Always Included Shaders before a build.
-    // Without the package nothing is found and nothing changes.
+    // Without the package nothing is found and nothing changes. The hologram's own shader is found by name
+    // at run time too, so it is added the same way.
     public class GltfShaders : IPreprocessBuildWithReport
     {
         static readonly string[] k_Names =
@@ -18,6 +19,7 @@ namespace ProjectBootstrap
             "Shader Graphs/glTF-pbrMetallicRoughness",
             "Shader Graphs/glTF-pbrSpecularGlossiness",
             "Shader Graphs/glTF-unlit",
+            "CardboardXR/Hologram", // the assistant's hologram (HologramAssistant.cs), found by name at run time
         };
 
         public int callbackOrder => 0;

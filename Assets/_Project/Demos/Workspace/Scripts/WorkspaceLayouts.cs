@@ -92,6 +92,8 @@ namespace CardboardXR.Demos.Workspace
                 if (model != null)
                     model.Close();
             }
+            if (m_Hologram != null)
+                m_Hologram.Close();
             if (m_PhoneScreen != null)
             {
                 Destroy(m_PhoneScreen.gameObject);

@@ -305,6 +305,25 @@ przycisków 148 dp w menu 3 × 3, pauza przywróconego filmu na pierwszej klatce
   `stop_reason: refusal` i `max_tokens`, ponowienie przy 429/5xx/529. Odpowiedzi asystenta odsyłane bez zmian
   (bloki thinking i fallback), historia tylko dopisywana; po 40 wymianach nowa rozmowa. Klucz: plik
   `klucz_ai.txt` → pęk kluczy (ThisDeviceOnly), plik usuwany; „usuń klucz” kasuje. Rozmowy nie są zapisywane.
+- **Hologram** (`HologramAssistant.cs`, `Assets/_Project/Shaders/Hologram.shader`): wzorowany na ekranie
+  „Jarvis” (siatka kuli, pomarańczowy rdzeń, orbitujące pierścienie, podstawa z ząbkami) i na sieciach włókien
+  z „Avengers”. Wszystko generowane kodem: linie, miękkie kropki (billboardy w vertex shaderze) i kilka
+  trójkątów, rysowane addytywnie (`Blend One One`), ~14 wywołań rysowania. Stany z `AssistantSession`
+  (Idle / Listening / Thinking / Speaking, `Level` = puls na każde słowo z `AVSpeechSynthesizer` przez
+  `willSpeakRangeOfSpeechString`; bez głosu – symulacja w tempie czytania). Logika asystenta wydzielona z okna do
+  `AssistantSession` (okno `AssistantView` i hologram ją współdzielą). Chwytanie przez `Carryable` (jak modele).
+  Shader dodawany do Always Included Shaders w `GltfShaders.cs` (inaczej `Shader.Find` w buildzie zwróci null).
+  Nie testowane: wygląd i jasność przy ruchu głowy (addytywne linie 1 px), wydajność (~230 węzłów, 600
+  włókien, 120 pyłków), zgodność shadera z renderowaniem stereo projektu, czy odmierzanie słów z AVSpeech
+  trafia w zakresy tekstu (UTF-16), czy hologram nie zasłania okien, czy `MaterialPropertyBlock` z `_Intensity`
+  w CBUFFER działa z SRP Batcherem.
+- **Modele 3D: chwytanie, pobieranie** (`Carryable.cs`, `ModelDownloader.cs`): uszczypnięcie modelu (collider
+  dopasowany do bryły) = chwyt dłonią 6DoF (pozycja palców + obrót nadgarstka w osi pionowej) albo głową (3DoF
+  i przycisk „Chwyć”); odstawiony opada na powierzchnię pod sobą (warstwa 30). Zapis modeli w układach.
+  Pobieranie: 7 modeli z Khronos glTF-Sample-Assets (adresy sprawdzone: HTTP 200) i `modele_url.txt`; https,
+  limit 60 MB, kontrola magicznych bajtów `glTF`, plik `.zrodlo.txt` ze źródłem i licencją. Nie testowane:
+  odczyt `Content-Length` w trakcie pobierania, zachowanie `DownloadHandlerFile` po `Abort`, położenie
+  panelu sterowania po przeniesieniu modelu (panel zostaje na miejscu).
 - **Układy** (`WorkspaceLayouts.cs`): Praca / Kino / Czytanie / Własny w `Documents/Uklady/*.json`
   (zapis układu rozbity na Capture/Write/Read/Apply); otwarcie zamyka okna, widżety i modele.
 - **Zrzut ekranu**: lewa połowa ekranu (lewe oko, z ewentualnym zniekształceniem soczewek) do Zdjęć.

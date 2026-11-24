@@ -177,6 +177,8 @@ namespace CardboardXR.Demos.Workspace
             m_Voice = gameObject.AddComponent<VoiceDictation>();
             m_Voice.SpeechRecognized += OnSpeechRecognized;
             m_Voice.Failed += OnVoiceFailed;
+            m_Assistant = gameObject.AddComponent<AssistantSession>();
+            m_Assistant.Initialize(m_Voice);
             m_Captions = gameObject.AddComponent<LiveCaptions>();
             m_Captions.Initialize(transform, m_Core.Head, m_Voice);
             m_Environment = gameObject.AddComponent<EnvironmentSphere>();
@@ -282,6 +284,10 @@ namespace CardboardXR.Demos.Workspace
             if (m_Cinema != null)
                 Destroy(m_Cinema);
 
+            if (m_Hologram != null)
+                Destroy(m_Hologram.gameObject);
+            if (m_Assistant != null)
+                Destroy(m_Assistant); // before the recognizer it listens to
             if (m_Captions != null)
                 Destroy(m_Captions); // before the recognizer it listens to
             if (m_Environment != null)
@@ -588,6 +594,8 @@ namespace CardboardXR.Demos.Workspace
             public List<SavedScreen> screens = new();
             public List<SavedWidget> widgets = new();
             public List<SavedModel> models = new();
+            public bool hologram;
+            public float hx, hy, hz; // the hologram's place, as a model's
             public bool phone;
             public string locale;
             public string environment; // the place shown instead of the room (null: the room)
@@ -644,6 +652,14 @@ namespace CardboardXR.Demos.Workspace
                 if (widget != null && widget.Kind != "model" && widget.Kind != "rysowanie" && widget.Kind != "gra")
                     saved.widgets.Add(new SavedWidget { kind = widget.Kind, data = widget.SaveData });
             }
+            if (m_Hologram != null)
+            {
+                var place = Quaternion.Inverse(m_HomeYaw) * (m_Hologram.transform.position - m_Core.Head.position);
+                saved.hologram = true;
+                saved.hx = place.x;
+                saved.hy = place.y;
+                saved.hz = place.z;
+            }
             foreach (var model in m_Models)
             {
                 if (model == null || string.IsNullOrEmpty(model.FilePath))
@@ -689,7 +705,7 @@ namespace CardboardXR.Demos.Workspace
         {
             var saved = ReadWorkspace(SaveFile);
             if (saved == null || ((saved.screens == null || saved.screens.Count == 0) && (saved.widgets == null || saved.widgets.Count == 0) &&
-                                  (saved.models == null || saved.models.Count == 0)))
+                                  (saved.models == null || saved.models.Count == 0) && !saved.hologram))
                 return false;
             ApplyWorkspace(saved);
             return true;
@@ -753,6 +769,8 @@ namespace CardboardXR.Demos.Workspace
             if (m_Environment != null && !string.IsNullOrEmpty(saved.environment) &&
                 (Array.IndexOf(EnvironmentSphere.BuiltIn, saved.environment) >= 0 || File.Exists(saved.environment)))
                 m_Environment.Show(saved.environment);
+            if (saved.hologram && m_Hologram == null)
+                CreateHologram(m_Core.Head.position + m_HomeYaw * new Vector3(saved.hx, saved.hy, saved.hz));
             if (saved.models != null && ModelViewer.Available)
             {
                 foreach (var item in saved.models)
@@ -809,6 +827,7 @@ namespace CardboardXR.Demos.Workspace
             var choices = new List<ChoiceList.Choice>
             {
                 new("Asystent", () => OpenAssistant()),
+                new("Hologram", ToggleHologram),
                 new("Galeria", OpenGallery),
                 new("Filmy", OpenFilmPicker),
                 new("Widżety", OpenWidgetMenu),
@@ -943,8 +962,41 @@ namespace CardboardXR.Demos.Workspace
             if (screen == null)
                 return null;
             var created = screen.gameObject.AddComponent<AssistantView>();
-            created.Initialize(screen, m_Voice);
+            created.Initialize(screen, m_Assistant);
             return created;
+        }
+
+        // ---- The hologram: the assistant as a glowing "virtual brain" (HologramAssistant.cs) ----
+        AssistantSession m_Assistant;
+        HologramAssistant m_Hologram;
+
+        public void ToggleHologram()
+        {
+            if (m_Hologram != null)
+                m_Hologram.Close();
+            else
+                CreateHologram(null);
+        }
+
+        // at: a saved place (null: the surface looked at)
+        void CreateHologram(Vector3? at)
+        {
+            if (m_Core == null || m_Assistant == null)
+                return;
+            var go = new GameObject("Hologram");
+            go.transform.SetParent(transform, true);
+            var hologram = go.AddComponent<HologramAssistant>();
+            if (!hologram.Initialize(m_Core, m_Assistant))
+            {
+                Destroy(go);
+                ShowToast("Brak shadera hologramu: zbuduj aplikację ponownie");
+                return;
+            }
+            go.transform.position = at ?? ModelViewer.PlacementPoint(m_Core.Head);
+            m_Hologram = hologram;
+            hologram.Closed += h => { if (m_Hologram == h) m_Hologram = null; };
+            if (at == null)
+                ShowToast("Hologram: „Zapytaj” albo powiedz „Jarvis, …”. Uszczypnij go, aby przenieść");
         }
 
         // ---- Board games on the table ----
@@ -1288,6 +1340,12 @@ namespace CardboardXR.Demos.Workspace
                     m_Captions.SetOn(false);
                 return;
             }
+            // Zapytaj was pressed (the window or the hologram): the next phrase is the question, whatever it is
+            if (m_Assistant != null && !VoiceDictation.IsMock && m_Assistant.TakeExpectation())
+            {
+                m_Assistant.Ask(transcribedText);
+                return;
+            }
             if (!VoiceDictation.IsMock && TryVoiceCommand(transcribedText))
                 return;
 
@@ -1295,7 +1353,7 @@ namespace CardboardXR.Demos.Workspace
             var assistant = m_ActiveScreen != null ? m_ActiveScreen.GetComponent<AssistantView>() : null;
             if (assistant != null && !VoiceDictation.IsMock)
             {
-                assistant.Ask(transcribedText);
+                m_Assistant.Ask(transcribedText);
                 return;
             }
 
@@ -1327,14 +1385,17 @@ namespace CardboardXR.Demos.Workspace
             string command = spoken.Trim().TrimEnd('.', '!', '?', ',').ToLowerInvariant();
             if (TryLayoutCommand(command))
                 return true;
-            // "zapytaj …", "asystencie …": a question for the assistant from anywhere
-            foreach (var prefix in new[] { "zapytaj ", "asystencie ", "asystent ", "hej claude ", "claude " })
+            // "zapytaj …", "Jarvis, …": a question for the assistant from anywhere. With the hologram out the
+            // answer comes from it, else the assistant's window opens.
+            string phrase = command.Replace(",", "");
+            foreach (var prefix in new[] { "zapytaj ", "jarvis ", "asystencie ", "asystent ", "hej claude ", "claude " })
             {
-                if (command.StartsWith(prefix, StringComparison.Ordinal) && command.Length > prefix.Length + 2)
+                if (phrase.StartsWith(prefix, StringComparison.Ordinal) && phrase.Length > prefix.Length + 2)
                 {
-                    var view = OpenAssistant();
-                    if (view != null)
-                        view.Ask(spoken.Trim().Substring(prefix.Length));
+                    if (m_Hologram == null)
+                        OpenAssistant();
+                    if (m_Assistant != null)
+                        m_Assistant.Ask(spoken.Trim().Replace(",", "").Substring(prefix.Length));
                     return true;
                 }
             }
@@ -1405,11 +1466,19 @@ namespace CardboardXR.Demos.Workspace
                     OpenWidgetMenu();
                     break;
                 case "usuń klucz": case "usuń klucz ai": case "delete key":
-                    AssistantView.DeleteKey();
+                    AssistantSession.DeleteKey();
                     ShowToast("Klucz asystenta usunięty z pęku kluczy");
                     break;
                 case "asystent": case "asystent ai": case "claude": case "assistant":
                     OpenAssistant();
+                    break;
+                case "jarvis": case "hologram": case "pokaż hologram":
+                    if (m_Hologram == null)
+                        ToggleHologram();
+                    break;
+                case "wyłącz hologram": case "zamknij hologram": case "hide hologram":
+                    if (m_Hologram != null)
+                        m_Hologram.Close();
                     break;
                 case "galeria": case "zdjęcia z telefonu": case "gallery": case "photos":
                     OpenGallery();
@@ -1813,6 +1882,8 @@ namespace CardboardXR.Demos.Workspace
             }
             if (m_Drawing != null && m_Drawing.StrokeCount > 0)
                 m_RoomAnchors.Keep(m_Drawing.transform, false);
+            if (m_Hologram != null && m_Hologram.Carry != null)
+                m_RoomAnchors.Keep(m_Hologram.transform, m_Hologram.Carry.IsCarried);
             foreach (var game in m_Games)
             {
                 if (game != null)
@@ -1888,13 +1959,13 @@ namespace CardboardXR.Demos.Workspace
                 return true;
 
             // A model: grab it with the fingers (6DoF) or let it follow the head (3DoF)
-            var grabbed = gazeTarget != null ? gazeTarget.GetComponentInParent<ModelViewer>() : null;
-            if (grabbed != null && grabbed.Carry != null)
+            var grabbed = gazeTarget != null ? gazeTarget.GetComponentInParent<Carryable>() : null;
+            if (grabbed != null)
             {
-                bool hand = source == PinchSource.Hand && grabbed.Carry.CanHandCarry;
-                grabbed.Carry.BeginCarry(hand);
+                bool hand = source == PinchSource.Hand && grabbed.CanHandCarry;
+                grabbed.BeginCarry(hand);
                 if (hand)
-                    m_GrabbedModel = grabbed; // let go when the fingers open
+                    m_GrabbedThing = grabbed; // let go when the fingers open
                 return true;
             }
 
@@ -1981,19 +2052,23 @@ namespace CardboardXR.Demos.Workspace
                     dropped = true;
                 }
             }
+            if (m_Hologram != null && m_Hologram.Carry != null && m_Hologram.Carry.IsCarried)
+            {
+                m_Hologram.Carry.EndCarry();
+                dropped = true;
+            }
             return dropped;
         }
 
         TableGame m_GamePinch;
-        ModelViewer m_GrabbedModel;
+        Carryable m_GrabbedThing; // a model or the hologram, held by the fingers
 
         public void EndPinch()
         {
-            if (m_GrabbedModel != null)
+            if (m_GrabbedThing != null)
             {
-                if (m_GrabbedModel.Carry != null)
-                    m_GrabbedModel.Carry.EndCarry();
-                m_GrabbedModel = null;
+                m_GrabbedThing.EndCarry();
+                m_GrabbedThing = null;
             }
             if (m_GamePinch != null)
             {
