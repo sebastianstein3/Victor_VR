@@ -710,9 +710,9 @@ namespace CardboardXR.Demos.Workspace
             m_Controls = WorldUi.Panel("Hologram Controls", transform, new Vector2(330f, 190f), 1.0f, new Color(0f, 0f, 0f, 0f), 20f);
             // Top row: stop, the name, close. Middle: Zapytaj, Na blat. Bottom: Model, Pamięć
             var name = M3.Text("HologramName", m_Controls, DisplayName, M3Theme.Type.TitleLarge, new Vector2(0f, 64f), new Vector2(180f, 40f),
-                new Color(0.7f, 0.95f, 1f));
+                new Color(0.05f, 0.1f, 0.17f)); // dark: it stands on the base's glow, where light text disappears
             name.characterSpacing = 6f;
-            name.fontStyle = FontStyles.Bold; // stays readable over the base's glow
+            name.fontStyle = FontStyles.Bold;
             M3.IconButton("HologramStop", m_Controls, "stop", M3Button.Variant.Tonal, new Vector2(-122f, 64f), () => m_Session.StopSpeaking(), 56f);
             M3.IconButton("HologramClose", m_Controls, "close", M3Button.Variant.Tonal, new Vector2(122f, 64f), Close, 56f);
             M3.Button("HologramAsk", m_Controls, "Zapytaj", M3Button.Variant.Filled, new Vector2(-80f, 4f), () => m_Session.Listen(), "pinch", 150f);
