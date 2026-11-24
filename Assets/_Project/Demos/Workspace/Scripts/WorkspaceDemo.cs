@@ -1502,6 +1502,14 @@ namespace CardboardXR.Demos.Workspace
                     if (m_Hologram == null)
                         ToggleHologram();
                     break;
+                case "pokaż hud": case "pokaż panel": case "show hud":
+                    if (m_Hologram != null)
+                        m_Hologram.HudVisible = true;
+                    break;
+                case "ukryj hud": case "ukryj panel": case "hide hud":
+                    if (m_Hologram != null)
+                        m_Hologram.HudVisible = false;
+                    break;
                 case "wyłącz hologram": case "zamknij hologram": case "hide hologram":
                     if (m_Hologram != null)
                         m_Hologram.Close();

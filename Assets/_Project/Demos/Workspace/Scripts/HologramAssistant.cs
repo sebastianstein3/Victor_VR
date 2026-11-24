@@ -19,7 +19,10 @@ namespace CardboardXR.Demos.Workspace
     //   speaking   the core and ticks pulse with every word the phone reads, rings of light go out from the
     //              globe, and the words appear as subtitles with the current one lit
     // Everything is built from code: lines, soft dots and a few triangles, drawn additively by the shader
-    // "CardboardXR/Hologram". Below it, the name and three buttons: Zapytaj (ask by voice), stop, close.
+    // "CardboardXR/Hologram". Round the brain: a faceted crystal shell that glows at its edges, packets of
+    // light running along the filaments, a vertical HUD dial that always faces you, a radar sweep and
+    // turning segmented rings on the base, and a lens flare across the core. Beside it, a status panel
+    // (HologramHud). Below it, the name and four buttons: stop, close, Zapytaj (ask by voice), Na blat.
     public class HologramAssistant : MonoBehaviour
     {
         public const string DisplayName = "JARVIS";
@@ -28,15 +31,30 @@ namespace CardboardXR.Demos.Workspace
         const float k_Height = 0.27f;      // m, the globe's centre above the base
         const float k_Radius = 0.085f;     // m, the globe
         const int k_Ticks = 72;
+        const float k_Scale = 1.2f;        // the whole figure, about 43 cm tall
         static readonly Color k_Cyan = new(0.25f, 0.85f, 1f);
         static readonly Color k_Orange = new(1f, 0.55f, 0.15f);
         static readonly Color k_White = new(0.92f, 0.98f, 1f);
         static readonly int k_Intensity = Shader.PropertyToID("_Intensity");
         static readonly int k_Tint = Shader.PropertyToID("_Tint");
+        static readonly int k_Warm = Shader.PropertyToID("_Warm");
+        static readonly int k_Pulse = Shader.PropertyToID("_Pulse");
+        static readonly int k_PulseTime = Shader.PropertyToID("_PulseTime");
 
         public Carryable Carry { get; private set; }
         public event Action<HologramAssistant> Closed;
         public event Action<HologramAssistant> PlaceRequested; // "Na blat": stand on the surface looked at
+
+        // The status panel beside the figure ("pokaż hud" / "ukryj hud")
+        public bool HudVisible
+        {
+            get => m_Hud != null && m_Hud.gameObject.activeSelf;
+            set
+            {
+                if (m_Hud != null)
+                    m_Hud.gameObject.SetActive(value);
+            }
+        }
 
         class Ring
         {
@@ -60,12 +78,16 @@ namespace CardboardXR.Demos.Workspace
         CoreServices m_Core;
         Transform m_Head;
         AssistantSession m_Session;
-        Material m_LineMaterial, m_DotMaterial;
+        Material m_LineMaterial, m_DotMaterial, m_ShellMaterial;
         MaterialPropertyBlock m_Block;
         readonly List<Mesh> m_Meshes = new();
 
-        Transform m_Globe, m_CoreGlow, m_DustPivot;
-        Renderer m_GlobeLines, m_Network, m_Nodes, m_CoreRenderer, m_Beam, m_Disc, m_BaseRings, m_TickRenderer, m_Dust, m_Foot;
+        Transform m_Body, m_Globe, m_CoreGlow, m_DustPivot; // m_Body holds the figure (scaled); the panels stay unscaled beside it
+        Transform m_ShellPivot, m_DialPivot, m_Dial;
+        Renderer m_GlobeLines, m_Network, m_Nodes, m_CoreRenderer, m_Beam, m_Disc, m_TickRenderer, m_Dust, m_Foot;
+        Renderer m_BaseRingA, m_BaseRingB, m_BaseRingC, m_Sweep, m_ShellFaces, m_ShellEdges, m_ShellNodes, m_DialRenderer, m_Flare;
+        float m_BaseAngle, m_SweepAngle, m_PulseClock, m_DustScale = 1f;
+        HologramHud m_Hud;
         readonly List<Ring> m_Rings = new();
         readonly Wave[] m_Waves = new Wave[3];
         int m_NextWave;
@@ -80,6 +102,7 @@ namespace CardboardXR.Demos.Workspace
         float m_GlobeAngle;
         float m_Spin = 8f, m_RingSpin = 22f, m_RingScale = 1f, m_Glow = 0.6f;
         Color m_Tint = Color.white;
+        float m_Warm; // 0..1: amber while thinking
         AssistantState m_PreviousState;
 
         readonly List<Word> m_Words = new();
@@ -106,20 +129,30 @@ namespace CardboardXR.Demos.Workspace
             m_LineMaterial.SetFloat("_Billboard", 0f);
             m_DotMaterial = new Material(shader) { name = "Hologram Dots" };
             m_DotMaterial.SetFloat("_Billboard", 1f);
+            m_ShellMaterial = new Material(shader) { name = "Hologram Shell" }; // lit at its edges only
+            m_ShellMaterial.SetFloat("_Billboard", 0f);
+            m_ShellMaterial.SetFloat("_Fresnel", 2.2f);
+
+            m_Body = new GameObject("Body").transform;
+            m_Body.SetParent(transform, false);
+            m_Body.localScale = Vector3.one * k_Scale;
 
             BuildBase();
             BuildGlobe();
             BuildNetwork();
+            BuildShell();
             BuildCore();
+            BuildFlare();
             BuildRings();
+            BuildDial();
             BuildWaves();
             BuildTicks();
             BuildDust();
             BuildPanels();
 
             var box = gameObject.AddComponent<BoxCollider>(); // what the gaze hits, to pick it up
-            box.center = new Vector3(0f, (k_Height + k_Radius) / 2f, 0f);
-            box.size = new Vector3(0.3f, k_Height + k_Radius + 0.02f, 0.3f);
+            box.center = new Vector3(0f, (k_Height + k_Radius) * k_Scale / 2f, 0f);
+            box.size = new Vector3(0.3f, (k_Height + k_Radius + 0.02f) * k_Scale, 0.3f) * 1.0f;
             Carry = gameObject.AddComponent<Carryable>();
             Carry.Initialize(core);
 
@@ -151,13 +184,14 @@ namespace CardboardXR.Demos.Workspace
             return renderer;
         }
 
-        void Look(Renderer renderer, float intensity, Color tint)
+        void Look(Renderer renderer, float intensity, Color tint, float warm = -1f)
         {
             if (renderer == null)
                 return;
             renderer.GetPropertyBlock(m_Block);
             m_Block.SetFloat(k_Intensity, intensity);
             m_Block.SetColor(k_Tint, tint);
+            m_Block.SetFloat(k_Warm, warm < 0f ? m_Warm : warm); // the core is warm already: it passes 0
             renderer.SetPropertyBlock(m_Block);
         }
 
@@ -166,22 +200,12 @@ namespace CardboardXR.Demos.Workspace
         // The base: four rings and an orange dial, a faint disc, a beam up to the globe, a glow at its foot
         void BuildBase()
         {
-            var v = new List<Vector3>();
-            var c = new List<Color>();
-            float[] radii = { 1f, 0.78f, 0.55f, 0.3f };
-            float[] alphas = { 0.6f, 0.42f, 0.36f, 0.3f };
-            for (int i = 0; i < radii.Length; i++)
-            {
-                float radius = k_BaseRadius * radii[i];
-                HoloMesh.Loop(v, c, 96, a => new Vector3(Mathf.Cos(a) * radius, 0.002f, Mathf.Sin(a) * radius), Alpha(k_Cyan, alphas[i]));
-            }
-            float dial = k_BaseRadius * 1.08f;
-            HoloMesh.Loop(v, c, 96, a => new Vector3(Mathf.Cos(a) * dial, 0.002f, Mathf.Sin(a) * dial), Alpha(k_Orange, 0.5f));
-            m_BaseRings = Part("Base Rings", transform, HoloMesh.Lines(v, c, "Base rings"), m_LineMaterial, Vector3.zero);
+            BuildBaseRings();
+            BuildSweep();
 
             // The disc: bright in the middle, gone at the rim
             var dv = new List<Vector3> { new(0f, 0.001f, 0f) };
-            var dc = new List<Color> { Alpha(k_Cyan, 0.22f) };
+            var dc = new List<Color> { Alpha(k_Cyan, 0.16f) };
             var dt = new List<int>();
             const int segments = 48;
             for (int i = 0; i < segments; i++)
@@ -196,7 +220,7 @@ namespace CardboardXR.Demos.Workspace
                 dt.Add(1 + i);
                 dt.Add(1 + (i + 1) % segments);
             }
-            m_Disc = Part("Base Disc", transform, HoloMesh.Surface(dv, dc, dt, "Base disc"), m_LineMaterial, Vector3.zero);
+            m_Disc = Part("Base Disc", m_Body, HoloMesh.Surface(dv, dc, dt, "Base disc"), m_LineMaterial, Vector3.zero);
 
             // The beam: a cone from the middle of the base up to just under the globe, fading out
             var bv = new List<Vector3>();
@@ -208,7 +232,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 float a = i * Mathf.PI * 2f / sides;
                 bv.Add(new Vector3(Mathf.Cos(a) * 0.07f, 0.003f, Mathf.Sin(a) * 0.07f));
-                bc.Add(Alpha(k_Cyan, 0.26f));
+                bc.Add(Alpha(k_Cyan, 0.13f));
                 bv.Add(new Vector3(Mathf.Cos(a) * 0.03f, top, Mathf.Sin(a) * 0.03f));
                 bc.Add(Alpha(k_Cyan, 0f));
             }
@@ -218,18 +242,94 @@ namespace CardboardXR.Demos.Workspace
                 bt.Add(a); bt.Add(a + 1); bt.Add(b + 1);
                 bt.Add(a); bt.Add(b + 1); bt.Add(b);
             }
-            m_Beam = Part("Beam", transform, HoloMesh.Surface(bv, bc, bt, "Beam"), m_LineMaterial, Vector3.zero);
+            m_Beam = Part("Beam", m_Body, HoloMesh.Surface(bv, bc, bt, "Beam"), m_LineMaterial, Vector3.zero);
 
             var foot = HoloMesh.Dots(new List<Vector3> { new(0f, 0.01f, 0f) }, new List<float> { 0.075f },
-                new List<Color> { Alpha(k_Cyan, 0.4f) }, "Foot glow");
-            m_Foot = Part("Foot Glow", transform, foot, m_DotMaterial, Vector3.zero);
+                new List<Color> { Alpha(k_Cyan, 0.25f) }, "Foot glow");
+            m_Foot = Part("Foot Glow", m_Body, foot, m_DotMaterial, Vector3.zero);
+        }
+
+        static Vector3 Polar(float radius, float angle, float y = 0.002f) => new(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
+
+        // A circular arc of points at a radius (angles in degrees), as line segments
+        static void Arc(List<Vector3> v, List<Color> c, float radius, float fromDegrees, float spanDegrees, Color color, float y = 0.002f)
+        {
+            int steps = Mathf.Max(2, Mathf.CeilToInt(spanDegrees / 5f));
+            var previous = Polar(radius, fromDegrees * Mathf.Deg2Rad, y);
+            for (int i = 1; i <= steps; i++)
+            {
+                var next = Polar(radius, (fromDegrees + spanDegrees * i / steps) * Mathf.Deg2Rad, y);
+                HoloMesh.Segment(v, c, previous, next, color, color);
+                previous = next;
+            }
+        }
+
+        // Three rings on the base, each its own mesh so they turn against each other: A: the outer circle with
+        // tick marks and the orange dial; B: arcs with gaps; C: dashes, an inner circle and spokes
+        void BuildBaseRings()
+        {
+            var v = new List<Vector3>();
+            var c = new List<Color>();
+            Arc(v, c, k_BaseRadius, 0f, 360f, Alpha(k_Cyan, 0.6f));
+            for (int i = 0; i < 60; i++)
+            {
+                float a = i * Mathf.PI * 2f / 60f;
+                float inner = k_BaseRadius * (i % 5 == 0 ? 0.88f : 0.93f);
+                HoloMesh.Segment(v, c, Polar(k_BaseRadius * 0.97f, a), Polar(inner, a), Alpha(k_Cyan, 0.5f), Alpha(k_Cyan, 0.5f));
+            }
+            Arc(v, c, k_BaseRadius * 1.08f, 0f, 360f, Alpha(k_Orange, 0.5f));
+            m_BaseRingA = Part("Base Ring A", m_Body, HoloMesh.Lines(v, c, "Base ring A"), m_LineMaterial, Vector3.zero);
+
+            v = new List<Vector3>();
+            c = new List<Color>();
+            for (int k = 0; k < 3; k++)
+            {
+                Arc(v, c, k_BaseRadius * 0.78f, k * 120f, 80f, Alpha(k_Cyan, 0.75f));
+                Arc(v, c, k_BaseRadius * 0.72f, k * 120f + 60f, 40f, Alpha(k_Cyan, 0.45f));
+            }
+            Arc(v, c, k_BaseRadius * 0.86f, 0f, 360f, Alpha(k_Cyan, 0.18f));
+            m_BaseRingB = Part("Base Ring B", m_Body, HoloMesh.Lines(v, c, "Base ring B"), m_LineMaterial, Vector3.zero);
+
+            v = new List<Vector3>();
+            c = new List<Color>();
+            for (int k = 0; k < 24; k++)
+                Arc(v, c, k_BaseRadius * 0.55f, k * 15f, 9f, Alpha(k_Cyan, 0.55f));
+            Arc(v, c, k_BaseRadius * 0.3f, 0f, 360f, Alpha(k_Cyan, 0.35f));
+            for (int k = 0; k < 8; k++)
+            {
+                float a = k * Mathf.PI / 4f;
+                HoloMesh.Segment(v, c, Polar(k_BaseRadius * 0.3f, a), Polar(k_BaseRadius * 0.55f, a), Alpha(k_Cyan, 0.25f), Alpha(k_Cyan, 0.25f));
+            }
+            m_BaseRingC = Part("Base Ring C", m_Body, HoloMesh.Lines(v, c, "Base ring C"), m_LineMaterial, Vector3.zero);
+        }
+
+        // A radar sweep over the base: a 70 degree wedge, brightest at its leading edge, going round
+        void BuildSweep()
+        {
+            var v = new List<Vector3> { new(0f, 0.0025f, 0f) };
+            var c = new List<Color> { Alpha(k_Cyan, 0.05f) };
+            var t = new List<int>();
+            const int steps = 16;
+            for (int i = 0; i <= steps; i++)
+            {
+                float degrees = -70f * i / steps;
+                v.Add(Polar(k_BaseRadius * 0.95f, degrees * Mathf.Deg2Rad, 0.0025f));
+                c.Add(Alpha(k_Cyan, Mathf.Lerp(0.34f, 0f, (float)i / steps)));
+            }
+            for (int i = 0; i < steps; i++)
+            {
+                t.Add(0);
+                t.Add(1 + i);
+                t.Add(2 + i);
+            }
+            m_Sweep = Part("Sweep", m_Body, HoloMesh.Surface(v, c, t, "Sweep"), m_LineMaterial, Vector3.zero);
         }
 
         // Meridians and parallels of a globe, in the globe's own space (it turns about its tilted axis)
         void BuildGlobe()
         {
             m_Globe = new GameObject("Globe").transform;
-            m_Globe.SetParent(transform, false);
+            m_Globe.SetParent(m_Body, false);
             m_Globe.localPosition = new Vector3(0f, k_Height, 0f);
             var v = new List<Vector3>();
             var c = new List<Color>();
@@ -267,6 +367,7 @@ namespace CardboardXR.Demos.Workspace
             }
             var v = new List<Vector3>();
             var c = new List<Color>();
+            var uvs = new List<Vector2>(); // along the line, and the phase of its travelling light (Hologram.shader)
             var seen = new HashSet<long>();
             var near = new List<(float distance, int index)>();
             for (int i = 0; i < points.Count; i++)
@@ -287,9 +388,12 @@ namespace CardboardXR.Demos.Workspace
                     var color = rnd.NextDouble() < 0.14 ? k_Orange : k_Cyan;
                     float alpha = Mathf.Lerp(0.25f, 0.6f, (float)rnd.NextDouble());
                     HoloMesh.Segment(v, c, points[i], points[j], Alpha(color, alpha), Alpha(color, alpha * 0.3f));
+                    float phase = (float)rnd.NextDouble();
+                    uvs.Add(new Vector2(0f, phase));
+                    uvs.Add(new Vector2(1f, phase));
                 }
             }
-            m_Network = Part("Filaments", m_Globe, HoloMesh.Lines(v, c, "Filaments"), m_LineMaterial, Vector3.zero);
+            m_Network = Part("Filaments", m_Globe, HoloMesh.Lines(v, c, "Filaments", uvs), m_LineMaterial, Vector3.zero);
 
             var sizes = new List<float>();
             var colors = new List<Color>();
@@ -302,6 +406,97 @@ namespace CardboardXR.Demos.Workspace
             m_Nodes = Part("Nodes", m_Globe, HoloMesh.Dots(points, sizes, colors, "Nodes"), m_DotMaterial, Vector3.zero);
         }
 
+        // A crystal shell just outside the globe: an icosphere of 80 facets with its corners pushed in and out
+        // so it looks cut, faint plates that glow at their edges (the shader's rim light) with bright edges and
+        // corners; it turns the other way to the globe
+        void BuildShell()
+        {
+            m_ShellPivot = new GameObject("Shell").transform;
+            m_ShellPivot.SetParent(m_Body, false);
+            m_ShellPivot.localPosition = new Vector3(0f, k_Height, 0f);
+            HoloMesh.Icosphere(1, out var corners, out var triangles);
+            var rnd = new System.Random(3);
+            for (int i = 0; i < corners.Count; i++)
+                corners[i] *= k_Radius * 1.27f * (0.9f + 0.2f * (float)rnd.NextDouble());
+
+            var fv = new List<Vector3>();
+            var fc = new List<Color>();
+            var ft = new List<int>();
+            for (int i = 0; i < triangles.Count; i++)
+            {
+                fv.Add(corners[triangles[i]]);
+                fc.Add(Alpha(k_Cyan, 0.09f));
+                ft.Add(i);
+            }
+            var faces = HoloMesh.Surface(fv, fc, ft, "Shell facets");
+            faces.RecalculateNormals(); // unshared corners: each facet its own normal, so each glows on its own
+            m_ShellFaces = Part("Shell Facets", m_ShellPivot, faces, m_ShellMaterial, Vector3.zero);
+
+            var ev = new List<Vector3>();
+            var ec = new List<Color>();
+            var seen = new HashSet<long>();
+            for (int i = 0; i < triangles.Count; i += 3)
+            {
+                for (int e = 0; e < 3; e++)
+                {
+                    int a = triangles[i + e], b = triangles[i + (e + 1) % 3];
+                    long key = a < b ? (long)a * 1000 + b : (long)b * 1000 + a;
+                    if (seen.Add(key))
+                        HoloMesh.Segment(ev, ec, corners[a], corners[b], Alpha(k_Cyan, 0.42f), Alpha(k_White, 0.42f));
+                }
+            }
+            m_ShellEdges = Part("Shell Edges", m_ShellPivot, HoloMesh.Lines(ev, ec, "Shell edges"), m_LineMaterial, Vector3.zero);
+
+            var sizes = new List<float>();
+            var colors = new List<Color>();
+            foreach (var _ in corners)
+            {
+                sizes.Add(0.0028f);
+                colors.Add(Alpha(k_White, 0.95f));
+            }
+            m_ShellNodes = Part("Shell Corners", m_ShellPivot, HoloMesh.Dots(corners, sizes, colors, "Shell corners"), m_DotMaterial, Vector3.zero);
+        }
+
+        // A lens flare across the core: a long horizontal streak, a short upright one and a thin warm one
+        void BuildFlare()
+        {
+            var zero = new List<Vector3> { Vector3.zero, Vector3.zero, Vector3.zero };
+            var colors = new List<Color> { Alpha(k_White, 0.5f), Alpha(k_Cyan, 0.3f), Alpha(k_Orange, 0.6f) };
+            var stretch = new List<Vector2> { new(0.17f, 0.0035f), new(0.0035f, 0.07f), new(0.05f, 0.0025f) };
+            m_Flare = Part("Flare", m_Body, HoloMesh.Dots(zero, null, colors, "Flare", stretch), m_DotMaterial, new Vector3(0f, k_Height, 0f));
+        }
+
+        // A thin vertical dial round the figure, like a gauge: a circle with a scale of ticks and an orange arc.
+        // It always faces the user (LateUpdate) and turns slowly in its own plane
+        void BuildDial()
+        {
+            m_DialPivot = new GameObject("Dial Pivot").transform;
+            m_DialPivot.SetParent(m_Body, false);
+            m_DialPivot.localPosition = new Vector3(0f, k_Height, 0f);
+            m_Dial = new GameObject("Dial").transform;
+            m_Dial.SetParent(m_DialPivot, false);
+            float radius = k_Radius * 2.45f;
+            var v = new List<Vector3>();
+            var c = new List<Color>();
+            Vector3 On(float r, float degrees) => new(Mathf.Cos(degrees * Mathf.Deg2Rad) * r, Mathf.Sin(degrees * Mathf.Deg2Rad) * r, 0f);
+            for (int i = 0; i < 360; i += 3)
+                HoloMesh.Segment(v, c, On(radius, i), On(radius, i + 3), Alpha(k_Cyan, 0.4f), Alpha(k_Cyan, 0.4f));
+            for (int i = 0; i < 120; i++)
+            {
+                float length = i % 10 == 0 ? 0.034f : i % 5 == 0 ? 0.024f : 0.012f;
+                HoloMesh.Segment(v, c, On(radius, i * 3f), On(radius - length, i * 3f), Alpha(k_Cyan, 0.5f), Alpha(k_Cyan, 0.5f));
+            }
+            for (int layer = 0; layer < 3; layer++) // a gauge's fill: a thick orange arc
+            {
+                float r = radius * (0.955f - layer * 0.006f);
+                for (int i = -30; i < 95; i += 3)
+                    HoloMesh.Segment(v, c, On(r, i), On(r, i + 3), Alpha(k_Orange, 0.9f), Alpha(k_Orange, 0.9f));
+            }
+            for (int i = 110; i < 310; i += 3)
+                HoloMesh.Segment(v, c, On(radius * 0.9f, i), On(radius * 0.9f, i + 3), Alpha(k_Cyan, 0.45f), Alpha(k_Cyan, 0.45f));
+            m_DialRenderer = Part("Dial Lines", m_Dial, HoloMesh.Lines(v, c, "Dial"), m_LineMaterial, Vector3.zero);
+        }
+
         // The glowing core: a wide warm halo, a hot middle and a white point
         void BuildCore()
         {
@@ -309,7 +504,7 @@ namespace CardboardXR.Demos.Workspace
                 new List<Vector3> { Vector3.zero, Vector3.zero, Vector3.zero },
                 new List<float> { 0.055f, 0.028f, 0.011f },
                 new List<Color> { Alpha(k_Orange, 0.42f), Alpha(new Color(1f, 0.75f, 0.35f), 0.8f), Alpha(Color.white, 1f) }, "Core");
-            m_CoreRenderer = Part("Core", transform, mesh, m_DotMaterial, new Vector3(0f, k_Height, 0f));
+            m_CoreRenderer = Part("Core", m_Body, mesh, m_DotMaterial, new Vector3(0f, k_Height, 0f));
             m_CoreGlow = m_CoreRenderer.transform;
         }
 
@@ -326,7 +521,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 var ring = new Ring { Speed = spec.speed };
                 ring.Pivot = new GameObject("Ring").transform;
-                ring.Pivot.SetParent(transform, false);
+                ring.Pivot.SetParent(m_Body, false);
                 ring.Pivot.localPosition = new Vector3(0f, k_Height, 0f);
                 ring.Pivot.localRotation = Quaternion.Euler(spec.tilt);
                 ring.Spin = new GameObject("Spin").transform;
@@ -356,7 +551,7 @@ namespace CardboardXR.Demos.Workspace
             for (int i = 0; i < m_Waves.Length; i++)
             {
                 var wave = new Wave();
-                wave.Renderer = Part("Wave", transform, HoloMesh.Lines(v, c, "Wave"), m_LineMaterial, new Vector3(0f, k_Height, 0f));
+                wave.Renderer = Part("Wave", m_Body, HoloMesh.Lines(v, c, "Wave"), m_LineMaterial, new Vector3(0f, k_Height, 0f));
                 wave.Transform = wave.Renderer.transform;
                 wave.Renderer.enabled = false;
                 m_Waves[i] = wave;
@@ -387,14 +582,14 @@ namespace CardboardXR.Demos.Workspace
             m_TickMesh.SetColors(colors);
             m_TickMesh.SetIndices(indices, MeshTopology.Lines, 0);
             m_TickMesh.bounds = new Bounds(new Vector3(0f, 0.04f, 0f), new Vector3(0.4f, 0.1f, 0.4f));
-            m_TickRenderer = Part("Ticks", transform, m_TickMesh, m_LineMaterial, Vector3.zero);
+            m_TickRenderer = Part("Ticks", m_Body, m_TickMesh, m_LineMaterial, Vector3.zero);
         }
 
         // Specks drifting in the air round the globe
         void BuildDust()
         {
             m_DustPivot = new GameObject("Dust").transform;
-            m_DustPivot.SetParent(transform, false);
+            m_DustPivot.SetParent(m_Body, false);
             var rnd = new System.Random(5);
             var centers = new List<Vector3>();
             var sizes = new List<float>();
@@ -430,9 +625,12 @@ namespace CardboardXR.Demos.Workspace
             M3.Button("HologramDesk", m_Controls, "Na blat", M3Button.Variant.Tonal, new Vector2(80f, -30f), () => PlaceRequested?.Invoke(this), "open_with", 150f);
             WorkspaceSounds.Attach(m_Controls);
 
-            m_Subtitles = WorldUi.Panel("Hologram Subtitles", transform, new Vector2(460f, 70f), 1.0f, new Color(0f, 0f, 0f, 0f), 16f);
-            m_SubtitleText = M3.Text("HologramSubtitle", m_Subtitles, "", M3Theme.Type.TitleLarge, Vector2.zero, new Vector2(440f, 60f), Color.white);
-            m_SubtitleText.fontSize = 26f;
+            m_Controls.localScale *= 0.7f; // smaller than a window's: it stands beside a 43 cm figure
+            m_Hud = HologramHud.Create(transform, m_Session);
+            m_Hud.Panel.localScale *= 0.7f;
+            m_Subtitles = WorldUi.Panel("Hologram Subtitles", transform, new Vector2(380f, 56f), 1.0f, new Color(0f, 0f, 0f, 0f), 16f);
+            m_SubtitleText = M3.Text("HologramSubtitle", m_Subtitles, "", M3Theme.Type.TitleLarge, Vector2.zero, new Vector2(360f, 48f), Color.white);
+            m_SubtitleText.fontSize = 20f;
             m_SubtitleText.fontStyle = FontStyles.Bold;
             m_Subtitles.gameObject.SetActive(false);
         }
@@ -513,7 +711,7 @@ namespace CardboardXR.Demos.Workspace
             if (m_Words.Count == 0)
                 return "";
             int current = Mathf.Max(0, m_CurrentWord);
-            int from = Mathf.Max(0, current - 2), to = Mathf.Min(m_Words.Count - 1, current + 3);
+            int from = Mathf.Max(0, current - 1), to = Mathf.Min(m_Words.Count - 1, current + 2);
             var text = new StringBuilder();
             for (int i = from; i <= to; i++)
             {
@@ -549,7 +747,7 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case AssistantState.Thinking:
                     spin = 70f; ringSpin = 170f; ringScale = 1.08f + 0.06f * Mathf.Sin(now * 9f); glow = 0.9f + 0.15f * Mathf.Sin(now * 23f);
-                    tint = new Color(1f, 0.78f, 0.5f);
+                    tint = Color.white;
                     break;
                 case AssistantState.Speaking:
                     spin = 20f; ringSpin = 70f; ringScale = 1f + 0.08f * level; glow = 0.75f + 0.5f * level; tint = Color.white;
@@ -564,6 +762,7 @@ namespace CardboardXR.Demos.Workspace
             m_RingScale = Mathf.Lerp(m_RingScale, ringScale, k);
             m_Glow = Mathf.Lerp(m_Glow, glow, 1f - Mathf.Exp(-9f * dt));
             m_Tint = Color.Lerp(m_Tint, tint, k);
+            m_Warm = Mathf.Lerp(m_Warm, state == AssistantState.Thinking ? 0.75f : 0f, k);
 
             // The globe and its filaments turn, tilted; the brain breathes with the voice
             m_GlobeAngle += m_Spin * dt;
@@ -580,7 +779,6 @@ namespace CardboardXR.Demos.Workspace
             Look(m_GlobeLines, m_Glow, m_Tint);
             Look(m_Network, m_Glow * (0.8f + 0.6f * level), m_Tint);
             Look(m_Nodes, m_Glow * (0.9f + 0.7f * level), m_Tint);
-            Look(m_BaseRings, m_Glow, m_Tint);
             Look(m_Disc, m_Glow * (0.9f + 0.5f * level), m_Tint);
             Look(m_Beam, m_Glow * (0.9f + 0.6f * level), m_Tint);
             Look(m_Foot, m_Glow * (0.8f + 1f * level), m_Tint);
@@ -590,7 +788,44 @@ namespace CardboardXR.Demos.Workspace
             // The core: swells with each word, flickers while thinking
             float coreScale = 1f + 0.7f * level + 0.05f * Mathf.Sin(now * 2f) + (state == AssistantState.Thinking ? 0.12f * Mathf.Sin(now * 20f) : 0f);
             m_CoreGlow.localScale = Vector3.one * coreScale;
-            Look(m_CoreRenderer, 0.7f + 0.8f * level + (state == AssistantState.Listening ? 0.4f : 0f), Color.white);
+            Look(m_CoreRenderer, 0.7f + 0.8f * level + (state == AssistantState.Listening ? 0.4f : 0f), Color.white, 0f);
+
+            // The base: its rings turn against each other and a radar sweep goes round (faster when busy)
+            float busy = state == AssistantState.Thinking ? 3f : state == AssistantState.Listening ? 2.2f : 1f;
+            m_BaseAngle += dt * busy;
+            m_SweepAngle += dt * 70f * busy;
+            m_BaseRingB.transform.localRotation = Quaternion.Euler(0f, m_BaseAngle * 18f, 0f);
+            m_BaseRingC.transform.localRotation = Quaternion.Euler(0f, -m_BaseAngle * 30f, 0f);
+            m_Sweep.transform.localRotation = Quaternion.Euler(0f, m_SweepAngle, 0f);
+            Look(m_BaseRingA, m_Glow, m_Tint);
+            Look(m_BaseRingB, m_Glow, m_Tint);
+            Look(m_BaseRingC, m_Glow, m_Tint);
+            Look(m_Sweep, m_Glow * (state == AssistantState.Idle ? 0.7f : 1.4f), m_Tint);
+
+            // The crystal shell, the dial and the flare
+            m_ShellPivot.localRotation = Quaternion.Euler(12f, -m_GlobeAngle * 0.6f, 0f);
+            Look(m_ShellFaces, m_Glow * (1f + level), m_Tint);
+            Look(m_ShellEdges, m_Glow * (0.8f + 0.6f * level), m_Tint);
+            Look(m_ShellNodes, m_Glow * (0.9f + 0.8f * level), m_Tint);
+            m_Dial.localRotation = Quaternion.Euler(0f, 0f, now * 5f * busy);
+            Look(m_DialRenderer, m_Glow * 0.9f, m_Tint);
+            Look(m_Flare, 0.3f + 0.9f * level + (state == AssistantState.Thinking ? 0.25f + 0.2f * Mathf.Sin(now * 17f) : 0f)
+                + (state == AssistantState.Listening ? 0.3f : 0f), Color.white, 0f);
+
+            // Light running along the filaments: slow at rest, quick while thinking, in time with the voice
+            float pulse = state == AssistantState.Thinking ? 1f : state == AssistantState.Speaking ? 0.5f + 0.5f * level
+                : state == AssistantState.Listening ? 0.6f : 0.35f;
+            float pulseSpeed = state == AssistantState.Thinking ? 0.9f : state == AssistantState.Speaking ? 0.3f + 0.5f * level
+                : state == AssistantState.Listening ? 0.2f : 0.1f;
+            m_PulseClock += dt * pulseSpeed;
+            m_Network.GetPropertyBlock(m_Block);
+            m_Block.SetFloat(k_Pulse, pulse);
+            m_Block.SetFloat(k_PulseTime, m_PulseClock);
+            m_Network.SetPropertyBlock(m_Block);
+
+            // The specks are drawn in while it thinks
+            m_DustScale = Mathf.Lerp(m_DustScale, state == AssistantState.Thinking ? 0.8f + 0.2f * Mathf.Sin(now * 3f) : 1f, k);
+            m_DustPivot.localScale = Vector3.one * m_DustScale;
 
             // The equalizer
             float lift = 0.006f + 0.05f * level + (state == AssistantState.Listening ? 0.012f : 0f);
@@ -603,7 +838,7 @@ namespace CardboardXR.Demos.Workspace
                 m_TickVertices[2 * i + 1] = top;
             }
             m_TickMesh.SetVertices(m_TickVertices);
-            Look(m_TickRenderer, 0.9f + 0.6f * level, Color.white);
+            Look(m_TickRenderer, 0.9f + 0.6f * level, Color.white, 0f);
 
             // Rings of light leaving the globe
             foreach (var wave in m_Waves)
@@ -638,8 +873,15 @@ namespace CardboardXR.Demos.Workspace
             var toHead = m_Head.position - transform.position;
             toHead.y = 0f;
             toHead = toHead.sqrMagnitude > 1e-4f ? toHead.normalized : Vector3.back;
-            Face(m_Controls, transform.position + toHead * (k_BaseRadius + 0.07f) + Vector3.up * 0.09f);
-            Face(m_Subtitles, transform.position + Vector3.up * (k_Height + k_Radius + 0.14f));
+            // The buttons stand in front of the base (not on it), the subtitles above the globe
+            Face(m_Controls, transform.position + toHead * (k_BaseRadius * k_Scale + 0.17f) + Vector3.up * 0.07f);
+            // (above the dial: 2.45 globe radii round the globe's centre)
+            Face(m_Subtitles, transform.position + Vector3.up * ((k_Height + k_Radius * 2.45f) * k_Scale + 0.06f));
+            // The status panel to the user's left of the figure, at the globe's height
+            var left = Vector3.Cross(Vector3.up, toHead);
+            Face(m_Hud.Panel, transform.position + left * 0.4f + toHead * 0.04f + Vector3.up * 0.27f);
+            // The dial's plane turns to face the user
+            m_DialPivot.rotation = Quaternion.LookRotation(toHead, Vector3.up);
         }
 
         void Face(RectTransform panel, Vector3 position)
@@ -664,6 +906,8 @@ namespace CardboardXR.Demos.Workspace
                 Destroy(m_LineMaterial);
             if (m_DotMaterial != null)
                 Destroy(m_DotMaterial);
+            if (m_ShellMaterial != null)
+                Destroy(m_ShellMaterial);
         }
     }
 
@@ -671,11 +915,14 @@ namespace CardboardXR.Demos.Workspace
     // with a colour per vertex, and soft dots (four vertices on one centre, see Hologram.shader)
     static class HoloMesh
     {
-        public static Mesh Lines(List<Vector3> vertices, List<Color> colors, string name)
+        // uvs: optional, per vertex (the shader's travelling light reads UV0)
+        public static Mesh Lines(List<Vector3> vertices, List<Color> colors, string name, List<Vector2> uvs = null)
         {
             var mesh = new Mesh { name = name };
             mesh.SetVertices(vertices);
             mesh.SetColors(colors);
+            if (uvs != null)
+                mesh.SetUVs(0, uvs);
             var indices = new int[vertices.Count];
             for (int i = 0; i < indices.Length; i++)
                 indices[i] = i;
@@ -714,8 +961,52 @@ namespace CardboardXR.Demos.Workspace
             }
         }
 
-        // Soft dots: radius (m) per dot; the shader turns the corners to face the camera
-        public static Mesh Dots(List<Vector3> centers, List<float> radii, List<Color> colors, string name)
+        // A unit icosphere: 12 corners, 20 faces, each subdivision splitting a face in four (1: 42 corners, 80 faces)
+        public static void Icosphere(int subdivisions, out List<Vector3> vertices, out List<int> triangles)
+        {
+            float t = (1f + Mathf.Sqrt(5f)) / 2f;
+            var corners = new List<Vector3>
+            {
+                new(-1, t, 0), new(1, t, 0), new(-1, -t, 0), new(1, -t, 0), new(0, -1, t), new(0, 1, t),
+                new(0, -1, -t), new(0, 1, -t), new(t, 0, -1), new(t, 0, 1), new(-t, 0, -1), new(-t, 0, 1),
+            };
+            for (int i = 0; i < corners.Count; i++)
+                corners[i] = corners[i].normalized;
+            var faces = new List<int>
+            {
+                0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+                3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1,
+            };
+            for (int s = 0; s < subdivisions; s++)
+            {
+                var split = new List<int>();
+                var middles = new Dictionary<long, int>();
+                int Middle(int a, int b)
+                {
+                    long key = a < b ? ((long)a << 20) + b : ((long)b << 20) + a;
+                    if (!middles.TryGetValue(key, out int index))
+                    {
+                        index = corners.Count;
+                        corners.Add(((corners[a] + corners[b]) / 2f).normalized);
+                        middles[key] = index;
+                    }
+                    return index;
+                }
+                for (int i = 0; i < faces.Count; i += 3)
+                {
+                    int a = faces[i], b = faces[i + 1], c = faces[i + 2];
+                    int ab = Middle(a, b), bc = Middle(b, c), ca = Middle(c, a);
+                    split.AddRange(new[] { a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca });
+                }
+                faces = split;
+            }
+            vertices = corners;
+            triangles = faces;
+        }
+
+        // Soft dots: radius (m) per dot, or, with stretch, its radius across and up (a streak); the shader turns
+        // the corners to face the camera
+        public static Mesh Dots(List<Vector3> centers, List<float> radii, List<Color> colors, string name, List<Vector2> stretch = null)
         {
             var vertices = new List<Vector3>(centers.Count * 4);
             var corners = new List<Vector2>(centers.Count * 4);
@@ -730,7 +1021,7 @@ namespace CardboardXR.Demos.Workspace
                 {
                     vertices.Add(centers[i]);
                     corners.Add(corner[c]);
-                    sizes.Add(new Vector2(radii[i], 0f));
+                    sizes.Add(stretch != null ? stretch[i] : new Vector2(radii[i], radii[i]));
                     vertexColors.Add(colors[i]);
                 }
                 triangles.Add(first); triangles.Add(first + 2); triangles.Add(first + 1);

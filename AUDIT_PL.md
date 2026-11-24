@@ -317,6 +317,21 @@ przycisków 148 dp w menu 3 × 3, pauza przywróconego filmu na pierwszej klatce
   włókien, 120 pyłków), zgodność shadera z renderowaniem stereo projektu, czy odmierzanie słów z AVSpeech
   trafia w zakresy tekstu (UTF-16), czy hologram nie zasłania okien, czy `MaterialPropertyBlock` z `_Intensity`
   w CBUFFER działa z SRP Batcherem.
+- **Hologram v2: bardziej zaawansowany wygląd** (po prośbie o „bardziej futurystyczny”, z obrazkiem odniesienia
+  ekranu „Jarvis” i hologramów z filmu). Dodane: kryształowa powłoka (ikosfera 80 ścian z wierzchołkami
+  przesuniętymi losowo, ściany świecą na krawędziach – `_Fresnel` w shaderze), paczki światła biegnące
+  włóknami (`_Pulse`, UV0 = pozycja i faza, zegar `_PulseTime` rośnie szybciej przy myśleniu), pionowa tarcza
+  ze skalą i pomarańczowym łukiem zwrócona do użytkownika, trzy segmentowe pierścienie podstawy obracające
+  się przeciwbieżnie, radar (klin 70°), wydłużone błyski przez rdzeń (UV1 = promień wszerz i w górę), bursztynowa
+  barwa przy myśleniu (`_Warm`: zwykłe mnożenie cyjanu nie da pomarańczu), kropki zerujące się na krawędzi
+  (bez kwadratu wokół jasnego rdzenia) i panel statusu `HologramHud.cs` z prawdziwymi danymi (FPS, pamięć
+  `Profiler`, bateria `SystemInfo`, czasy odpowiedzi `AssistantSession.Latencies`). Render (`VisionPro/renders/
+  render_hologram.py`) odkrył i pozwolił poprawić: panel przycisków leżący na podstawie, zbyt duże napisy,
+  zielonkawy zamiast ciepłego stan „myśli”, kwadrat wokół rdzenia, zbyt jasną powłokę.
+  Nie testowane: jasność na prawdziwym tle (addytywne światło w jasnym pokoju traci kontrast), wydajność
+  (~28 elementów rysowanych, ~230 węzłów, ~600 włókien, 80 ścian), trafienie wzrokiem w uchwyt, czy panel
+  statusu nie zasłania okien, `Profiler.GetTotalAllocatedMemoryLong` poza buildem deweloperskim (jest zapas:
+  `GC.GetTotalMemory`).
 - **Modele 3D: chwytanie, pobieranie** (`Carryable.cs`, `ModelDownloader.cs`): uszczypnięcie modelu (collider
   dopasowany do bryły) = chwyt dłonią 6DoF (pozycja palców + obrót nadgarstka w osi pionowej) albo głową (3DoF
   i przycisk „Chwyć”); odstawiony opada na powierzchnię pod sobą (warstwa 30). Zapis modeli w układach.

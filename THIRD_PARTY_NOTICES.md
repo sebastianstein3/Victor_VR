@@ -62,6 +62,17 @@ licenses are in `vendor/LICENSES.txt` beside them.
 - `fflate.js`: fflate 0.8.3 (https://github.com/101arrowz/fflate), for writing the 3MF and zip files.
   MIT License.
 
+## Inspirations for the hologram (no code copied)
+
+The look of the assistant's hologram (`HologramAssistant.cs`, `Shaders/Hologram.shader`) follows common
+hologram-shader techniques (rim light by Fresnel, scan-line shimmer and flicker, glow added to the
+background) and audio-reactive particle orbs with idle / listening / thinking / speaking states. Looked at
+for the ideas, written from scratch:
+- https://github.com/andydbc/HologramShader (MIT, Andy Duboc): a Unity hologram shader.
+- https://github.com/nehasriva/phonon (MIT, Neha Srivastava): an audio-reactive particle orb on a sphere.
+The sci-fi look of the reference images supplied by the owner (a voice-interface console, glowing
+filament spheres from film) is imitated, not reproduced; no film frames, models or assets are included.
+
 ## Roboto and Material Icons
 
 `Assets/_Project/UI/Fonts/Roboto-Regular.ttf` and `Roboto-Medium.ttf` are from

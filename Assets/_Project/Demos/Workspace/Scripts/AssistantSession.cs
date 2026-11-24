@@ -61,6 +61,9 @@ namespace CardboardXR.Demos.Workspace
         public bool HasKey => !string.IsNullOrEmpty(m_Key);
         public bool Busy => m_Thinking;
         public string Answer { get; private set; } = "";
+        public string Locale => m_Voice != null ? m_Voice.Locale : "pl-PL";
+        // How long the last answers took, in seconds, oldest first (the hologram's status panel graphs them)
+        public readonly List<float> Latencies = new();
         public static string KeyFileName => k_KeyFile;
 
         public bool ReadAloud
@@ -230,6 +233,7 @@ namespace CardboardXR.Demos.Workspace
         {
             m_Thinking = true;
             Changed?.Invoke();
+            float started = Time.unscaledTime;
             string result = null, error = null;
             for (int attempt = 0; attempt < 3; attempt++)
             {
@@ -283,6 +287,9 @@ namespace CardboardXR.Demos.Workspace
                 Notice?.Invoke("Nieczytelna odpowiedź.");
                 yield break;
             }
+            Latencies.Add(Time.unscaledTime - started);
+            while (Latencies.Count > 40)
+                Latencies.RemoveAt(0);
             // The assistant turn goes back exactly as it came (thinking and fallback blocks included)
             m_Messages.Add("{\"role\":\"assistant\",\"content\":" + content + "}");
 
