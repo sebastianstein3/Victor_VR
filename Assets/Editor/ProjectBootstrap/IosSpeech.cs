@@ -37,6 +37,10 @@ namespace ProjectBootstrap
                 plist.root.SetString("NSCalendarsFullAccessUsageDescription", calendarUsage);
                 plist.root.SetString("NSCalendarsUsageDescription", calendarUsage);
 
+                // Photos: screenshots are added (add only), the gallery reads the library
+                plist.root.SetString("NSPhotoLibraryAddUsageDescription", "CardboardXR saves screenshots of the Workspace to Photos.");
+                plist.root.SetString("NSPhotoLibraryUsageDescription", "CardboardXR shows your photos and spatial videos in the Workspace gallery.");
+
                 // The Workspace's PC screen reads frames over plain HTTP from a computer on the same
                 // Wi-Fi (RemoteDesktopReceiver). Player Settings allow HTTP, which makes Unity allow it
                 // everywhere (NSAllowsArbitraryLoads); narrow that to the local network only.
@@ -74,6 +78,7 @@ namespace ProjectBootstrap
             // iOS 17.4, so it is linked weakly (the plugin checks for iOS 26.4 itself); Swift needs a version
             project.AddFrameworkToProject(framework, "Translation.framework", true);
             project.AddFrameworkToProject(framework, "UniformTypeIdentifiers.framework", false); // file picker (Pliki)
+            project.AddFrameworkToProject(framework, "Photos.framework", false); // gallery and screenshots
             if (string.IsNullOrEmpty(project.GetBuildPropertyForAnyConfig(framework, "SWIFT_VERSION")))
                 project.SetBuildProperty(framework, "SWIFT_VERSION", "5.0");
             project.WriteToFile(projectPath);

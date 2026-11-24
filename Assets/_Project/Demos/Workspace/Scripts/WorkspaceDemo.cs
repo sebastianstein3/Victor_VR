@@ -251,6 +251,8 @@ namespace CardboardXR.Demos.Workspace
                 Destroy(m_ControlDock.gameObject);
 
             SetCinemaScreen(false);
+            if (m_Toast != null)
+                Destroy(m_Toast.gameObject);
 
             WorkspaceSounds.Pressed -= OnButtonPressed;
             WorkspaceSounds.Release();
@@ -559,19 +561,53 @@ namespace CardboardXR.Demos.Workspace
             public bool phone;
             public string locale;
             public string environment; // the place shown instead of the room (null: the room)
+            public bool cinema;
         }
 
         static string SaveFile => Path.Combine(Application.persistentDataPath, "workspace.json");
 
         void SaveWorkspace()
         {
-            if (m_Core == null)
-                return;
+            if (m_Core != null)
+                WriteWorkspace(SaveFile, CaptureWorkspace());
+        }
+
+        static bool WriteWorkspace(string path, SavedWorkspace saved)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, JsonUtility.ToJson(saved, true));
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Workspace] Nie zapisano układu: {e.Message}");
+                return false;
+            }
+        }
+
+        static SavedWorkspace ReadWorkspace(string path)
+        {
+            try
+            {
+                return File.Exists(path) ? JsonUtility.FromJson<SavedWorkspace>(File.ReadAllText(path)) : null;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Workspace] Nie wczytano układu: {e.Message}");
+                return null;
+            }
+        }
+
+        SavedWorkspace CaptureWorkspace()
+        {
             var saved = new SavedWorkspace
             {
                 phone = m_PhoneScreen != null,
                 locale = m_Voice != null ? m_Voice.Locale : null,
                 environment = m_Environment != null ? m_Environment.Current : null,
+                cinema = m_Cinema != null && m_Cinema.IsCinemaMode,
             };
             foreach (var widget in m_Widgets)
             {
@@ -604,32 +640,21 @@ namespace CardboardXR.Demos.Workspace
                     pinned = screen.Pinned,
                 });
             }
-            try
-            {
-                File.WriteAllText(SaveFile, JsonUtility.ToJson(saved, true));
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[Workspace] Nie zapisano układu: {e.Message}");
-            }
+            return saved;
         }
 
         bool RestoreWorkspace()
         {
-            SavedWorkspace saved;
-            try
-            {
-                if (!File.Exists(SaveFile))
-                    return false;
-                saved = JsonUtility.FromJson<SavedWorkspace>(File.ReadAllText(SaveFile));
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[Workspace] Nie wczytano układu: {e.Message}");
-                return false;
-            }
+            var saved = ReadWorkspace(SaveFile);
             if (saved == null || ((saved.screens == null || saved.screens.Count == 0) && (saved.widgets == null || saved.widgets.Count == 0)))
                 return false;
+            ApplyWorkspace(saved);
+            return true;
+        }
+
+        // Opens the saved windows, widgets, phone and place around the user (into an empty workspace)
+        void ApplyWorkspace(SavedWorkspace saved)
+        {
             saved.screens ??= new List<SavedScreen>();
 
             foreach (var item in saved.screens)
@@ -700,8 +725,9 @@ namespace CardboardXR.Demos.Workspace
                 if (m_LanguageBtn != null)
                     m_LanguageBtn.Text = saved.locale == "en-US" ? "EN" : "PL";
             }
+            if (m_Cinema != null && saved.cinema != m_Cinema.IsCinemaMode)
+                ToggleCinemaMode();
             Debug.Log($"[Workspace] Przywrócono układ: {saved.screens.Count} okien");
-            return true;
         }
 
         // iOS may end a backgrounded app without OnDemoExit: save when going to the background
@@ -712,7 +738,7 @@ namespace CardboardXR.Demos.Workspace
         }
 
         // ---- "Więcej": the tools that don't fit in the dock ----
-        // The dock's "Więcej" button toggles it: one menu at a time. Nine tools on one page (3 x 3);
+        // The dock's "Więcej" button toggles it: one menu at a time. 3 x 3 pages, the most used first;
         // the widgets have their own menu.
         VirtualScreen m_MoreScreen;
 
@@ -731,12 +757,14 @@ namespace CardboardXR.Demos.Workspace
             {
                 new(m_Captions != null && m_Captions.IsOn ? "Bez napisów" : "Napisy", ToggleCaptions),
                 new("Widżety", OpenWidgetMenu),
-                new("PDF", OpenPdfPicker),
+                new("Układy", OpenLayouts),
                 new("Filmy", OpenFilmPicker),
+                new("PDF", OpenPdfPicker),
                 new("Zdjęcia 3D", OpenSpatialPicker),
                 new("Środowisko", OpenEnvironmentPicker),
                 new("Modele 3D", OpenModelPicker),
                 new("Pliki", OpenFiles),
+                new("Zrzut ekranu", TakeScreenshot),
                 new("Samouczek", OpenTutorial),
             };
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Więcej", choices, columns: 3);
@@ -1096,6 +1124,8 @@ namespace CardboardXR.Demos.Workspace
         bool TryVoiceCommand(string spoken)
         {
             string command = spoken.Trim().TrimEnd('.', '!', '?', ',').ToLowerInvariant();
+            if (TryLayoutCommand(command))
+                return true;
             switch (command)
             {
                 case "nowy ekran": case "nowy monitor": case "new screen":
@@ -1158,6 +1188,12 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "widżety": case "widgets":
                     OpenWidgetMenu();
+                    break;
+                case "układy": case "layouts":
+                    OpenLayouts();
+                    break;
+                case "zrzut ekranu": case "zrzut": case "screenshot":
+                    TakeScreenshot();
                     break;
                 case "zamknij": case "zamknij okno": case "close": case "close window":
                     if (m_ActiveScreen != null)
@@ -1529,6 +1565,7 @@ namespace CardboardXR.Demos.Workspace
         {
             UpdateHeldPose();
             UpdateRoomAnchors();
+            UpdateToast();
             UpdateCinemaScreen();
 
             // 1. Physical Bluetooth Keyboard Input
