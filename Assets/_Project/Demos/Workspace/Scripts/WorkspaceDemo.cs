@@ -240,6 +240,8 @@ namespace CardboardXR.Demos.Workspace
                     Destroy(model.gameObject);
             }
             m_Models.Clear();
+            if (m_Drawing != null)
+                Destroy(m_Drawing.gameObject);
 
             if (m_Keyboard != null)
                 Destroy(m_Keyboard.gameObject);
@@ -611,7 +613,7 @@ namespace CardboardXR.Demos.Workspace
             };
             foreach (var widget in m_Widgets)
             {
-                if (widget != null && widget.Kind != "model")
+                if (widget != null && widget.Kind != "model" && widget.Kind != "rysowanie")
                     saved.widgets.Add(new SavedWidget { kind = widget.Kind, data = widget.SaveData });
             }
             foreach (var screen in m_Screens)
@@ -760,6 +762,7 @@ namespace CardboardXR.Demos.Workspace
                 new("Galeria", OpenGallery),
                 new("Widżety", OpenWidgetMenu),
                 new("Układy", OpenLayouts),
+                new("Rysowanie", OpenDrawing),
                 new("Filmy", OpenFilmPicker),
                 new("PDF", OpenPdfPicker),
                 new("Zdjęcia 3D", OpenSpatialPicker),
@@ -828,6 +831,48 @@ namespace CardboardXR.Demos.Workspace
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Wybierz film", choices,
                 "Brak filmów. Wrzuć .mp4 / .mov do folderu Filmy aplikacji (Finder, aplikacja Pliki albo Więcej > Pliki).",
                 closeOnPick: false);
+        }
+
+        // ---- Drawing in the room: while its panel is open, a pinch away from the windows draws ----
+        SpaceDrawing m_Drawing;
+        DrawControls m_DrawControls;
+        bool m_DrawingPinch;
+
+        public void OpenDrawing()
+        {
+            if (m_Core == null)
+                return;
+            if (m_DrawControls != null)
+            {
+                WorldUi.PlaceInFront((RectTransform)m_DrawControls.transform, m_Core.Head, 1.1f, -5f, 30f);
+                return;
+            }
+            if (m_Drawing == null)
+            {
+                var root = new GameObject("Rysunki");
+                root.transform.SetParent(transform, false);
+                root.transform.position = m_Core.Head.position; // the room anchor for all strokes
+                m_Drawing = root.AddComponent<SpaceDrawing>();
+                m_Drawing.Initialize(m_Core);
+            }
+            m_Drawing.Active = true;
+            var size = new Vector2(400f, 260f);
+            m_DrawControls = WidgetPanel.Create<DrawControls>(transform, m_Core.Head, size, "Rysowanie", 1.1f);
+            m_DrawControls.Drawing = m_Drawing;
+            m_DrawControls.Refresh();
+            PlaceWidget((RectTransform)m_DrawControls.transform, size, 1.1f);
+            m_Widgets.Add(m_DrawControls);
+            m_DrawControls.Closed += w =>
+            {
+                m_Widgets.Remove(w);
+                m_DrawControls = null;
+                if (m_Drawing != null)
+                {
+                    m_Drawing.EndStroke();
+                    m_Drawing.Active = false;
+                }
+            };
+            ShowToast("Uszczypnij w powietrzu, aby rysować");
         }
 
         // ---- The iPhone's Photos library (one gallery window at a time: it shares the native list) ----
@@ -1223,6 +1268,13 @@ namespace CardboardXR.Demos.Workspace
                 case "galeria": case "zdjęcia z telefonu": case "gallery": case "photos":
                     OpenGallery();
                     break;
+                case "rysuj": case "rysowanie": case "draw":
+                    OpenDrawing();
+                    break;
+                case "cofnij": case "undo":
+                    if (m_Drawing != null)
+                        m_Drawing.Undo();
+                    break;
                 case "układy": case "layouts":
                     OpenLayouts();
                     break;
@@ -1594,6 +1646,8 @@ namespace CardboardXR.Demos.Workspace
                 if (model != null)
                     m_RoomAnchors.Keep(model.transform, false);
             }
+            if (m_Drawing != null && m_Drawing.StrokeCount > 0)
+                m_RoomAnchors.Keep(m_Drawing.transform, false);
             if (m_Keyboard != null && m_Keyboard.gameObject.activeSelf)
                 m_RoomAnchors.Keep(m_Keyboard.transform, false);
             if (m_Trackpad != null && m_Trackpad.gameObject.activeSelf)
@@ -1663,6 +1717,20 @@ namespace CardboardXR.Demos.Workspace
             if (DropCarried())
                 return true;
 
+            // Drawing: a pinch not on a window or panel draws (it needs the hand's position: 6DoF)
+            if (m_Drawing != null && m_Drawing.Active &&
+                (gazeTarget == null || gazeTarget.GetComponentInParent<Canvas>() == null))
+            {
+                if (source != PinchSource.Hand)
+                {
+                    ShowToast("Rysowanie wymaga śledzenia dłoni (6DoF)");
+                    return false;
+                }
+                m_Drawing.BeginStroke();
+                m_DrawingPinch = true;
+                return true;
+            }
+
             if (gazeTarget == null)
                 return false;
 
@@ -1721,6 +1789,12 @@ namespace CardboardXR.Demos.Workspace
 
         public void EndPinch()
         {
+            if (m_DrawingPinch)
+            {
+                m_DrawingPinch = false;
+                if (m_Drawing != null)
+                    m_Drawing.EndStroke();
+            }
             // Dropping happens on the pinch itself (TryBeginPinch); nothing to do when it opens.
         }
     }

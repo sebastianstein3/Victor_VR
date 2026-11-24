@@ -13,6 +13,7 @@
         "Unity.XR.ARFoundation",
         "Unity.XR.ARSubsystems",
         "CardboardXR.Demos.Video",
+        "CardboardXR.Demos.Paint",
         "Unity.WebRTC",
         "glTFast"
     ],
