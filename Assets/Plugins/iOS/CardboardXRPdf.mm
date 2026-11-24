@@ -67,3 +67,19 @@ extern "C" int CardboardXR_PdfRender(int identifier, int page, int width, int he
     CGContextRelease(context);
     return 1;
 }
+
+// The text of a PDF (at most maxChars), or NULL. The result is malloc'd: Unity's marshaller for a string return
+// copies it and frees it itself, so it must not be reused here.
+extern "C" char* CardboardXR_PdfText(const char* path, int maxChars)
+{
+    if (path == NULL)
+        return NULL;
+    NSString* file = [NSString stringWithUTF8String:path];
+    PDFDocument* document = file ? [[PDFDocument alloc] initWithURL:[NSURL fileURLWithPath:file]] : nil;
+    if (!document || document.isLocked)
+        return NULL;
+    NSString* text = document.string ?: @"";
+    if (maxChars > 0 && (int)text.length > maxChars)
+        text = [text substringToIndex:maxChars];
+    return strdup(text.UTF8String ?: "");
+}

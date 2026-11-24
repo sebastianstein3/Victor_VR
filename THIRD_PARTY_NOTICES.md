@@ -73,6 +73,17 @@ for the ideas, written from scratch:
 The sci-fi look of the reference images supplied by the owner (a voice-interface console, glowing
 filament spheres from film) is imitated, not reproduced; no film frames, models or assets are included.
 
+## Inspirations for the assistant's tools (no code copied)
+
+The assistant's tool loop and its MCP client (`AssistantSession.cs`, `AgentTools.cs`) are written from scratch against the
+public specifications: the Anthropic Messages API (tool use, server tools) and the Model Context Protocol, Streamable HTTP
+transport (https://modelcontextprotocol.io). Looked at for the ideas (agent loop, tool confirmation, MCP servers):
+- https://github.com/modelcontextprotocol/servers (MIT, reference MCP servers) and
+  https://github.com/modelcontextprotocol/csharp-sdk (Apache-2.0, a C# MCP client; not used, as it doesn't fit Unity's IL2CPP).
+- https://github.com/block/goose (Apache-2.0), https://github.com/All-Hands-AI/OpenHands (MIT): agents with tools and MCP.
+- Google Drive through MCP, run by the user on their own computer, not included: https://github.com/taylorwilsdon/google_workspace_mcp
+  (MIT) and https://github.com/piotr-agier/google-drive-mcp.
+
 ## Roboto and Material Icons
 
 `Assets/_Project/UI/Fonts/Roboto-Regular.ttf` and `Roboto-Medium.ttf` are from

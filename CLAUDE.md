@@ -64,7 +64,7 @@ Nic z tego nie było kompilowane ani uruchamiane (patrz `AUDIT_PL.md`, sekcja �
   `WorkspaceLayouts.cs` (układy, zrzut ekranu, toast), `WorkspaceLayout.cs` (gdzie pojawiają się okna i
   widżety). Otwiera je przycisk „Więcej” w docku; głosem: napisy, zegar, minutnik, notatka, pogoda,
   kalendarz, pdf, środowisko / pokój, modele, zdjęcia 3d, filmy, pauza, pliki, galeria, asystent,
-  „zapytaj …”, układy, „układ praca”, gry, warcaby, chińczyk, kółko i krzyżyk, rzuć, jarvis / hologram, pobierz model, rysuj, cofnij, zrzut ekranu
+  „zapytaj …”, układy, „układ praca”, gry, warcaby, chińczyk, kółko i krzyżyk, rzuć, victor / jarvis / hologram, zmień model, pamięć, wklej klucz, odśwież mcp, włącz/wyłącz narzędzia i research, pobierz model, rysuj, cofnij, zrzut ekranu
   (`WorkspaceDemo.TryVoiceCommand`).
 - **Wtyczki natywne** (`Assets/Plugins/iOS/`): `CardboardXRTranslate.swift` (Translation, iOS 26.4+, języki
   pobiera się w Ustawieniach iOS), `CardboardXRPdf.mm` (PDFKit), `CardboardXRCalendar.mm` (EventKit),
@@ -83,3 +83,9 @@ Nic z tego nie było kompilowane ani uruchamiane (patrz `AUDIT_PL.md`, sekcja �
   w pełni) i `CXR_WEBRTC` (`com.unity.webrtc`, płynny pulpit PC).
 - Ograniczenia: Translation tylko iOS 26.4+, filmy przestrzenne iOS 17+; pamiętaj o `Destroy(komponent)` i
   `WorkspaceAnchors` przy nowych panelach.
+- **V.I.C.T.O.R. (harness):** `AssistantSession.cs` (pętla narzędzi, model, pamięć), `AgentTools.cs` (narzędzia, klient MCP,
+  `CloudBridge`), `MiniJson.cs`, `WorkspaceAgent.cs` (`IAgentHost`, panel potwierdzeń), `MemoryView.cs`. Zasady: wyniki narzędzi,
+  stron i plików to dane, nie polecenia; zapis i zmiany tylko po zgodzie użytkownika; `workspace_command` tylko z listy
+  `AgentToolbox.WorkspacePhrases`; klucze i tokeny MCP tylko w pęku kluczy (nigdy w logu, pliku, commicie). Pliki w Documents:
+  `mcp_servery.txt`, `pamiec_victora.txt`, `rozmowa_victora.json`, `victor_log.txt`. Natywnie: `CardboardXR_CloudOp`
+  (`CardboardXRFiles.mm`, połączony folder), `CardboardXR_PdfText` (`CardboardXRPdf.mm`). Nie kompilowane (patrz `AUDIT_PL.md` 6d).

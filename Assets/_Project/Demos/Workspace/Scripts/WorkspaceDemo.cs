@@ -13,7 +13,7 @@ namespace CardboardXR.Demos.Workspace
     // Includes floating monitors, remote PC desktop streaming, TikTok/Messenger smartphone,
     // invisible desk keyboard and trackpad with physical haptics, AirPods Pro 2 3D spatial audio,
     // voice dictation, cinema dimming mode, and Bluetooth physical keyboard/mouse input.
-    public partial class WorkspaceDemo : Demo, IPinchHandler
+    public partial class WorkspaceDemo : Demo, IPinchHandler, IAgentHost
     {
         const float k_ScreenDistance = 1.4f;
         const float k_KeyboardDistance = 0.6f;
@@ -179,6 +179,7 @@ namespace CardboardXR.Demos.Workspace
             m_Voice.Failed += OnVoiceFailed;
             m_Assistant = gameObject.AddComponent<AssistantSession>();
             m_Assistant.Initialize(m_Voice);
+            m_Assistant.Host = this;
             m_Captions = gameObject.AddComponent<LiveCaptions>();
             m_Captions.Initialize(transform, m_Core.Head, m_Voice);
             m_Environment = gameObject.AddComponent<EnvironmentSphere>();
@@ -1423,6 +1424,9 @@ namespace CardboardXR.Demos.Workspace
         {
             if (string.IsNullOrWhiteSpace(transcribedText))
                 return;
+            // A question from the assistant is open: tak / nie
+            if (m_ConfirmAnswer != null && HandleConfirmSpeech(transcribedText))
+                return;
             // Captions on: speech is subtitled, not typed or obeyed, except the command to stop them
             if (m_Captions != null && m_Captions.IsOn)
             {
@@ -1591,6 +1595,38 @@ namespace CardboardXR.Demos.Workspace
                 case "nowa rozmowa": case "new conversation":
                     if (m_Assistant != null)
                         m_Assistant.NewConversation();
+                    break;
+                case "odśwież mcp": case "połącz mcp": case "mcp": case "reload mcp":
+                    if (m_Assistant != null)
+                        m_Assistant.ReloadMcp();
+                    break;
+                case "wyłącz narzędzia": case "tools off":
+                    if (m_Assistant != null)
+                    {
+                        m_Assistant.ToolsEnabled = false;
+                        ShowToast("Narzędzia V.I.C.T.O.R.-a wyłączone");
+                    }
+                    break;
+                case "włącz narzędzia": case "tools on":
+                    if (m_Assistant != null)
+                    {
+                        m_Assistant.ToolsEnabled = true;
+                        ShowToast("Narzędzia V.I.C.T.O.R.-a włączone");
+                    }
+                    break;
+                case "wyłącz research": case "wyłącz internet": case "research off":
+                    if (m_Assistant != null)
+                    {
+                        m_Assistant.ResearchEnabled = false;
+                        ShowToast("Wyszukiwanie w sieci wyłączone");
+                    }
+                    break;
+                case "włącz research": case "włącz internet": case "research on":
+                    if (m_Assistant != null)
+                    {
+                        m_Assistant.ResearchEnabled = true;
+                        ShowToast("Wyszukiwanie w sieci włączone");
+                    }
                     break;
                 case "wklej klucz": case "paste key":
                     if (m_Assistant != null)
@@ -2033,6 +2069,7 @@ namespace CardboardXR.Demos.Workspace
             UpdateHeldPose();
             UpdateRoomAnchors();
             UpdateToast();
+            UpdateConfirm();
             UpdateCinemaScreen();
 
             // 1. Physical Bluetooth Keyboard Input

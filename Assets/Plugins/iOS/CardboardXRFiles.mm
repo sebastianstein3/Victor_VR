@@ -11,6 +11,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <ImageIO/ImageIO.h>
 #import <AVFoundation/AVFoundation.h>
+#import <PDFKit/PDFKit.h>
 
 extern "C" void UnitySendMessage(const char* obj, const char* method, const char* msg);
 extern UIViewController* UnityGetGLViewController();
@@ -324,4 +325,145 @@ void CardboardXR_FilesUnlink(void)
     [NSUserDefaults.standardUserDefaults removeObjectForKey:kBookmarkKey];
 }
 
+}
+
+// ---- The linked folder for the assistant's tools (V.I.C.T.O.R.) ----
+// One call, one answer: the callback gets the request id and a JSON text on the main queue:
+// list -> {"folder","files":[{"name","size","local"}]}, read -> {"text"}, write -> {"ok":true}, or {"error"}.
+typedef void (*CXRCloudCallback)(int requestId, const char* json);
+
+static void CloudAnswer(CXRCloudCallback callback, int requestId, NSDictionary* payload)
+{
+    NSData* data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+    NSString* text = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"{\"error\":\"json\"}";
+    dispatch_async(dispatch_get_main_queue(), ^{ callback(requestId, text.UTF8String); });
+}
+
+static const NSUInteger kCloudReadLimit = 4u * 1024u * 1024u;   // bytes of a file we agree to open
+static const NSUInteger kCloudWriteLimit = 512u * 1024u;        // bytes we agree to write
+static const NSUInteger kCloudTextLimit = 60000;                // characters handed to the model
+
+static NSString* CloudReadText(NSURL* file, NSString** error)
+{
+    NSString* ext = file.pathExtension.lowercaseString;
+    if ([ext isEqualToString:@"pdf"])
+    {
+        PDFDocument* document = [[PDFDocument alloc] initWithURL:file];
+        if (!document || document.isLocked)
+        {
+            *error = @"nie da się otworzyć PDF-a";
+            return nil;
+        }
+        NSString* text = document.string ?: @"";
+        return text.length > kCloudTextLimit ? [text substringToIndex:kCloudTextLimit] : text;
+    }
+    NSNumber* size = nil;
+    [file getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+    if (size.unsignedIntegerValue > kCloudReadLimit)
+    {
+        *error = @"plik jest za duży (limit 4 MB)";
+        return nil;
+    }
+    NSData* data = [NSData dataWithContentsOfURL:file];
+    NSString* text = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+    if (!text)
+    {
+        *error = @"to nie jest plik tekstowy (UTF-8) ani PDF";
+        return nil;
+    }
+    return text.length > kCloudTextLimit ? [text substringToIndex:kCloudTextLimit] : text;
+}
+
+extern "C" void CardboardXR_CloudOp(int requestId, const char* op, const char* name, const char* text, CXRCloudCallback callback)
+{
+    NSString* operation = op ? [NSString stringWithUTF8String:op] : @"";
+    NSString* fileName = name ? [NSString stringWithUTF8String:name] : @"";
+    NSString* content = text ? [NSString stringWithUTF8String:text] : @"";
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSURL* folder = LinkedFolder();
+        if (!folder)
+        {
+            CloudAnswer(callback, requestId, @{ @"error" : @"brak połączonego folderu: Więcej > Pliki > Połącz folder" });
+            return;
+        }
+        BOOL isList = [operation isEqualToString:@"list"];
+        if (!isList && !SafeName(fileName))
+        {
+            CloudAnswer(callback, requestId, @{ @"error" : @"zła nazwa pliku (sama nazwa, bez folderów)" });
+            return;
+        }
+        BOOL scoped = [folder startAccessingSecurityScopedResource];
+        NSDictionary* answer = nil;
+        NSError* coordinateError = nil;
+        NSFileCoordinator* coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+        if (isList)
+        {
+            __block NSMutableArray* list = [NSMutableArray array];
+            [coordinator coordinateReadingItemAtURL:folder options:NSFileCoordinatorReadingWithoutChanges error:&coordinateError
+                                         byAccessor:^(NSURL* url) {
+                NSArray<NSURL*>* items = [NSFileManager.defaultManager contentsOfDirectoryAtURL:url
+                    includingPropertiesForKeys:@[ NSURLIsDirectoryKey, NSURLFileSizeKey ] options:0 error:nil];
+                for (NSURL* item in items)
+                {
+                    NSString* itemName = item.lastPathComponent;
+                    BOOL local = YES;
+                    if ([itemName hasPrefix:@"."] && [itemName hasSuffix:@".icloud"] && itemName.length > 8)
+                    {
+                        itemName = [itemName substringWithRange:NSMakeRange(1, itemName.length - 8)];
+                        local = NO;
+                    }
+                    NSNumber* isDirectory = nil;
+                    [item getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+                    if (!SafeName(itemName) || isDirectory.boolValue)
+                        continue;
+                    NSNumber* size = nil;
+                    [item getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+                    [list addObject:@{ @"name" : itemName, @"size" : size ?: @0, @"local" : @(local) }];
+                    if (list.count >= 200)
+                        break;
+                }
+            }];
+            answer = coordinateError ? @{ @"error" : coordinateError.localizedDescription }
+                                     : @{ @"folder" : folder.lastPathComponent ?: @"", @"files" : list };
+        }
+        else if ([operation isEqualToString:@"read"])
+        {
+            NSURL* file = [folder URLByAppendingPathComponent:fileName];
+            __block NSString* result = nil;
+            __block NSString* failure = nil;
+            // Coordinated reading downloads a file that is still only in the cloud
+            [coordinator coordinateReadingItemAtURL:file options:0 error:&coordinateError byAccessor:^(NSURL* url) {
+                NSString* readError = nil;
+                result = CloudReadText(url, &readError);
+                failure = readError;
+            }];
+            if (coordinateError)
+                answer = @{ @"error" : coordinateError.localizedDescription };
+            else if (result)
+                answer = @{ @"text" : result };
+            else
+                answer = @{ @"error" : failure ?: @"nie udało się odczytać" };
+        }
+        else if ([operation isEqualToString:@"write"])
+        {
+            if ([content lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > kCloudWriteLimit)
+                answer = @{ @"error" : @"tekst jest za długi (limit 512 KB)" };
+            else
+            {
+                NSURL* file = [folder URLByAppendingPathComponent:fileName];
+                __block NSError* writeError = nil;
+                [coordinator coordinateWritingItemAtURL:file options:NSFileCoordinatorWritingForReplacing error:&coordinateError
+                                             byAccessor:^(NSURL* url) {
+                    [content writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:&writeError];
+                }];
+                NSError* error = coordinateError ?: writeError;
+                answer = error ? @{ @"error" : error.localizedDescription } : @{ @"ok" : @YES };
+            }
+        }
+        else
+            answer = @{ @"error" : @"nieznana operacja" };
+        if (scoped)
+            [folder stopAccessingSecurityScopedResource];
+        CloudAnswer(callback, requestId, answer);
+    });
 }

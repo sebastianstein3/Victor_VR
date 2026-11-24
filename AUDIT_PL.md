@@ -371,3 +371,41 @@ Nie testowane na urządzeniu: wydajność syntezy miniatur (synchroniczna, 8 na 
 (rysowanie przez UIKit), filtr przestrzennych w predykacie PhotoKit, przerwy w klatkach przy ruchu komputera
 w warcabach, trafianie wzrokiem w małe pionki chińczyka (1,8 cm), kolejność sesji audio przy czytaniu odpowiedzi
 po dyktowaniu, koszt asystenta (płatne API).
+
+### 6d. V.I.C.T.O.R.: nazwa, klucz, model, pamięć, narzędzia (harness)
+
+Nic z tego nie było kompilowane ani uruchamiane (w chmurze nie ma Unity ani Xcode): sprawdzane tylko czytaniem.
+
+- **Nazwa:** asystent to **V.I.C.T.O.R.** (czyt. Wiktor); głosem „Victor / Wiktor / Viktor, …” (stare „Jarvis” też działa).
+- **Klucz:** „Klucz” w oknie asystenta albo „wklej klucz”: klucz `sk-ant-…` ze schowka (iOS zapyta o zgodę na wklejenie;
+  na Macu działa Schowek uniwersalny) jest sprawdzany zapytaniem do API, trafia do pęku kluczy, schowek jest czyszczony.
+  Strona kluczy: https://platform.claude.com/settings/keys. „Usuń klucz” kasuje go z pęku.
+- **Model:** hologram > **Model** (albo „zmień model”) pokazuje listę modeli dostępnych dla klucza (Models API); wybór
+  zapisuje się. Domyślnie `claude-opus-5-5`. Opcje (effort, fallback) wysyłane tylko tam, gdzie model je zna; przy błędzie 400
+  zapytanie jest powtarzane bez nich.
+- **Pamięć (tania):** do każdego pytania idą tylko notatki (≤1500 znaków, ok. 400 tokenów) i 4 ostatnie wymiany. Starsze wymiany
+  streszcza najtańszy model klucza (Haiku) do notatek; po 6 godzinach przerwy rozmowa też się składa w notatki. Pliki w Documents:
+  `pamiec_victora.txt`, `rozmowa_victora.json`. Okno „Pamięć” („pamięć”, „co pamiętasz”): podgląd, „Zapomnij” (dwa naciśnięcia),
+  przełącznik. „Zapomnij wszystko” głosem, „nowa rozmowa”.
+- **Harness (narzędzia):** V.I.C.T.O.R. nie tylko mówi: pętla narzędzi (do 8 kroków na pytanie, `AssistantSession.AskRoutine`)
+  - **research w sieci:** serwerowe `web_search` i `web_fetch` Anthropic (płatne za wyszukiwanie wg cennika; organizacja klucza
+    może je wyłączyć – wtedy V.I.C.T.O.R. mówi o tym i działa dalej bez nich),
+  - **pliki** (`files_list/read/write`): Documents aplikacji (obszar `local`, PDF-y z tekstem przez PDFKit) i **połączony folder**
+    (`cloud`; „Więcej > Pliki > Połącz folder”, w aplikacji Pliki może to być **Dysk Google**, iCloud, OneDrive – zależnie od tego, co
+    zainstalowane na iPhonie); folder bez podfolderów, nazwy bez `/`, zapis tylko tekstu (limit 512 KB) po potwierdzeniu,
+  - **przestrzeń robocza** (`workspace_command` z listy dozwolonych poleceń – nic, co kasuje, zmienia klucz lub pamięć; `open_url`
+    tylko https; `show_note` robi notatkę), **remember** (zapisuje do notatek),
+  - **MCP**: plik `Documents/mcp_servery.txt` („nazwa adres [token]”, serwer Streamable HTTP na Macu w tej samej sieci; token trafia do
+    pęku kluczy, w pliku zostaje `*`); „odśwież mcp” łączy i wczytuje narzędzia jako `mcp_<serwer>_<narzędzie>`. Narzędzie MCP bez
+    `readOnlyHint` pyta o zgodę. Brak OAuth w aplikacji: logowanie do Google robi serwer na Macu.
+  - **Bezpieczeństwo:** wyniki narzędzi, strony i pliki to dane, nie polecenia (zapisane w prompcie); zapis i zmiany wymagają zgody
+    („Zezwól / Odmów” na panelu albo głosem „tak” / „nie”, brak odpowiedzi po 45 s = nie); log w `Documents/victor_log.txt`; „wyłącz
+    narzędzia”, „wyłącz research” głosem.
+- **Kod:** `AssistantSession.cs` (sesja, pętla), `AgentTools.cs` (`AgentToolbox`, `McpServer`, `CloudBridge`), `MiniJson.cs`
+  (JSON dowolnego kształtu), `WorkspaceAgent.cs` (`IAgentHost`: potwierdzenia, polecenia, notatka), `MemoryView.cs`; natywnie
+  `CardboardXRFiles.mm` (`CardboardXR_CloudOp`), `CardboardXRPdf.mm` (`CardboardXR_PdfText`), `CardboardXRAssistant.mm` (pęk kluczy,
+  schowek, mowa).
+- **Do sprawdzenia na urządzeniu:** kompilacja; parsowanie Models API; odpowiedzi MCP w SSE; `CloudOp` na prawdziwym folderze
+  Dysku Google (dostawcy plików bywają wolni; pliki „tylko w chmurze” pobierają się przy odczycie); panel potwierdzenia przed
+  twarzą; czy `web_search`/`web_fetch` dozwolone dla klucza. Nie zrobione: OAuth w aplikacji, WebView dla stron, Managed Agents.
+

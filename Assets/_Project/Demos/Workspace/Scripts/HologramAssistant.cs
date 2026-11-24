@@ -788,7 +788,9 @@ namespace CardboardXR.Demos.Workspace
             switch (state)
             {
                 case AssistantState.Thinking:
-                    return "<color=#5CE1FF>myślę" + new string('.', 1 + (int)(now * 2.5f) % 3) + "</color>";
+                    // What it is doing (a tool at work), else just that it thinks
+                    return "<color=#5CE1FF>" + (string.IsNullOrEmpty(m_Session.Activity) ? "myślę" : Clean(m_Session.Activity)) +
+                           new string('.', 1 + (int)(now * 2.5f) % 3) + "</color>";
                 case AssistantState.Listening:
                     return "<color=#9ADFF2>słucham…</color>";
                 case AssistantState.Speaking:
