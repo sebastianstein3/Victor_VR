@@ -17,7 +17,7 @@ namespace CardboardXR.Demos.Workspace
     public class SpatialMediaView : MonoBehaviour
     {
         public static string Folder => Path.Combine(Application.persistentDataPath, "Przestrzenne");
-        static readonly string[] k_Photos = { ".heic", ".jpg", ".jpeg", ".png" };
+        static readonly string[] k_Photos = { ".heic", ".heif", ".jpg", ".jpeg", ".png", ".dng", ".tif", ".tiff", ".gif", ".webp" };
         static readonly string[] k_Videos = { ".mov", ".mp4" };
 
         VirtualScreen m_Screen;
@@ -104,7 +104,7 @@ namespace CardboardXR.Demos.Workspace
                 ok = OpenVideo(path);
                 kind = ok ? "film 3D" : "nie jest filmem przestrzennym (MV-HEVC)";
             }
-            else if (ext == ".heic")
+            else if (ext != ".jpg" && ext != ".jpeg" && ext != ".png") // HEIC and the rest: ImageIO on the phone
             {
                 ok = OpenNativePhoto(path, out bool stereo);
                 kind = stereo ? "zdjęcie 3D" : "zdjęcie 2D";

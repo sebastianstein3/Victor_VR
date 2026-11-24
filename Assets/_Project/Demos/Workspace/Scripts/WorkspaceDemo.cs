@@ -618,6 +618,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
                     screen.GetComponent<ChoiceList>() != null || screen.GetComponent<FileImport>() != null ||
+                    screen.GetComponent<GalleryView>() != null ||
                     (screen.IsBrowser && screen.Browser.IsPrivate)) // a private window leaves no trace
                     continue;
                 saved.screens.Add(new SavedScreen
@@ -756,6 +757,7 @@ namespace CardboardXR.Demos.Workspace
             var choices = new List<ChoiceList.Choice>
             {
                 new(m_Captions != null && m_Captions.IsOn ? "Bez napisów" : "Napisy", ToggleCaptions),
+                new("Galeria", OpenGallery),
                 new("Widżety", OpenWidgetMenu),
                 new("Układy", OpenLayouts),
                 new("Filmy", OpenFilmPicker),
@@ -826,6 +828,35 @@ namespace CardboardXR.Demos.Workspace
             screen.gameObject.AddComponent<ChoiceList>().Initialize(screen, "Wybierz film", choices,
                 "Brak filmów. Wrzuć .mp4 / .mov do folderu Filmy aplikacji (Finder, aplikacja Pliki albo Więcej > Pliki).",
                 closeOnPick: false);
+        }
+
+        // ---- The iPhone's Photos library (one gallery window at a time: it shares the native list) ----
+        public void OpenGallery()
+        {
+            foreach (var existing in m_Screens)
+            {
+                if (existing != null && existing.GetComponent<GalleryView>() != null)
+                {
+                    SetActiveScreen(existing);
+                    return;
+                }
+            }
+            var screen = CreateNewScreen("Galeria");
+            if (screen != null)
+                screen.gameObject.AddComponent<GalleryView>().Initialize(screen, OpenFromGallery);
+        }
+
+        // A photo or spatial photo/video in SpatialMediaView, any other video in FilmPlayer: a new window
+        void OpenFromGallery(string path, bool video, bool spatial)
+        {
+            var screen = CreateNewScreen(System.IO.Path.GetFileNameWithoutExtension(path));
+            if (screen == null)
+                return;
+            var files = new List<string> { path };
+            if (video && !spatial)
+                screen.gameObject.AddComponent<FilmPlayer>().Initialize(screen, files, 0, ToggleCinemaMode);
+            else
+                screen.gameObject.AddComponent<SpatialMediaView>().Initialize(screen, files, 0);
         }
 
         // ---- Files from iCloud Drive and other places, into the app's folders ----
@@ -1189,6 +1220,9 @@ namespace CardboardXR.Demos.Workspace
                 case "widżety": case "widgets":
                     OpenWidgetMenu();
                     break;
+                case "galeria": case "zdjęcia z telefonu": case "gallery": case "photos":
+                    OpenGallery();
+                    break;
                 case "układy": case "layouts":
                     OpenLayouts();
                     break;
@@ -1382,6 +1416,12 @@ namespace CardboardXR.Demos.Workspace
             {
                 var media = m_ActiveScreen.GetComponent<SpatialMediaView>();
                 if (gesture == DynamicGesture.SwipeUp) media.Next(); else media.Previous();
+            }
+            else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
+                     m_ActiveScreen != null && m_ActiveScreen.GetComponent<GalleryView>() != null)
+            {
+                var gallery = m_ActiveScreen.GetComponent<GalleryView>();
+                if (gallery != null && gesture == DynamicGesture.SwipeUp) gallery.NextPage(); else if (gallery != null) gallery.PreviousPage();
             }
             else if ((gesture == DynamicGesture.SwipeUp || gesture == DynamicGesture.SwipeDown) &&
                      m_ActiveScreen != null && m_ActiveScreen.GetComponent<FilmPlayer>() != null)
