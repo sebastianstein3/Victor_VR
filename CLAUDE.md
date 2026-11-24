@@ -57,11 +57,12 @@ Nic z tego nie było kompilowane ani uruchamiane (patrz `AUDIT_PL.md`, sekcja �
   (zdjęcia i filmy przestrzenne), `FilmPlayer.cs` (filmy, ekran kinowy), `FileImport.cs` (Pliki: import z
   iCloud / okna wyboru plików), `GalleryView.cs` (galeria Zdjęć), `AssistantView.cs` (asystent AI, Claude
   Messages API przez `UnityWebRequest`, `claude-opus-5-5`, `anthropic-version: 2026-10-21`), `SpaceDrawing.cs`
-  (rysowanie, pędzle z dema Paint), `TableGame.cs` + `CheckersGame.cs` + `LudoGame.cs` (gry na stole),
+  (rysowanie, pędzle z dema Paint), `TableGame.cs` + `CheckersGame.cs` + `LudoGame.cs` + `TicTacToeGame.cs` (gry na stole; kółko i krzyżyk
+  rysuje tuszem `SpaceDrawing`),
   `WorkspaceLayouts.cs` (układy, zrzut ekranu, toast), `WorkspaceLayout.cs` (gdzie pojawiają się okna i
   widżety). Otwiera je przycisk „Więcej” w docku; głosem: napisy, zegar, minutnik, notatka, pogoda,
   kalendarz, pdf, środowisko / pokój, modele, zdjęcia 3d, filmy, pauza, pliki, galeria, asystent,
-  „zapytaj …”, układy, „układ praca”, gry, warcaby, chińczyk, rzuć, rysuj, cofnij, zrzut ekranu
+  „zapytaj …”, układy, „układ praca”, gry, warcaby, chińczyk, kółko i krzyżyk, rzuć, rysuj, cofnij, zrzut ekranu
   (`WorkspaceDemo.TryVoiceCommand`).
 - **Wtyczki natywne** (`Assets/Plugins/iOS/`): `CardboardXRTranslate.swift` (Translation, iOS 26.4+, języki
   pobiera się w Ustawieniach iOS), `CardboardXRPdf.mm` (PDFKit), `CardboardXRCalendar.mm` (EventKit),
