@@ -35,9 +35,11 @@ namespace CardboardXR.Demos.Workspace
             var ask = M3.Button("AssistantAsk", m_Screen.Rect, "Zapytaj", M3Button.Variant.Filled, Vector2.zero, session.Listen, "pinch", 130f);
             m_SpeakButton = M3.Button("AssistantSpeak", m_Screen.Rect, "Głos", M3Button.Variant.Tonal, Vector2.zero, ToggleReadAloud, null, 90f);
             var reset = M3.Button("AssistantNew", m_Screen.Rect, "Nowa", M3Button.Variant.Text, Vector2.zero, session.NewConversation, "refresh", 100f);
+            var key = M3.Button("AssistantKey", m_Screen.Rect, "Klucz", M3Button.Variant.Outlined, Vector2.zero, session.PasteKeyFromClipboard, null, 100f);
             VirtualScreen.PinToFooter((RectTransform)ask.transform, 0f, 75f);
             VirtualScreen.PinToFooter((RectTransform)m_SpeakButton.transform, 0f, 190f);
             VirtualScreen.PinToFooter((RectTransform)reset.transform, 0f, 290f);
+            VirtualScreen.PinToFooter((RectTransform)key.transform, 0f, 395f);
             m_SpeakButton.Selected = session.ReadAloud;
             WorkspaceSounds.Attach(screen);
 
@@ -47,12 +49,12 @@ namespace CardboardXR.Demos.Workspace
             session.Changed += OnChanged;
 
             if (!session.RefreshKey())
-                Show("Brak klucza API Claude.\n\nNa Macu: Finder > iPhone > Pliki > CardboardXR, albo w aplikacji Pliki, " +
-                     $"wrzuć plik „{AssistantSession.KeyFileName}” z kluczem (jedna linia, z console.anthropic.com). Potem otwórz asystenta ponownie: " +
-                     "klucz trafi do pęku kluczy iPhone'a, a plik zostanie usunięty.");
+                Show("Brak klucza API Claude.\n\nSkopiuj klucz ze strony platform.claude.com/settings/keys (na Macu: Schowek uniwersalny przeniesie go na " +
+                     "iPhone'a) i naciśnij „Klucz” (albo powiedz „wklej klucz”): zostanie sprawdzony i schowany w pęku kluczy, a schowek wyczyszczony. " +
+                     $"Można też wrzucić plik „{AssistantSession.KeyFileName}” z kluczem do folderu aplikacji.");
             else
-                Show("Zapytaj o cokolwiek: przycisk „Zapytaj”, mów, gdy to okno jest aktywne, albo pisz i naciśnij Enter.\n" +
-                     "Głosem z każdego miejsca: „zapytaj …”. „Hologram” pokazuje asystenta jako hologram.");
+                Show($"Zapytaj {AssistantSession.Name}-a o cokolwiek: przycisk „Zapytaj”, mów, gdy to okno jest aktywne, albo pisz i naciśnij Enter.\n" +
+                     "Głosem z każdego miejsca: „Victor, …”. „Hologram” pokazuje go jako hologram, „zmień model” wybiera model, „pamięć” pokazuje notatki.");
         }
 
         void ToggleReadAloud()
@@ -62,7 +64,7 @@ namespace CardboardXR.Demos.Workspace
         }
 
         void OnUserSaid(string question) => Append("<b>Ty:</b> " + Escape(question));
-        void OnAnswered(string answer) => Append("<b>Jarvis:</b> " + Escape(answer));
+        void OnAnswered(string answer) => Append($"<b>{AssistantSession.Name}:</b> " + Escape(answer));
         void OnNotice(string notice) => Append("<color=#F2B8B5>" + Escape(notice) + "</color>");
 
         void OnChanged()

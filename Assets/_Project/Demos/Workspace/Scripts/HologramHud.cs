@@ -15,7 +15,7 @@ namespace CardboardXR.Demos.Workspace
     public class HologramHud : MonoBehaviour
     {
         const float k_Width = 300f;
-        const float k_Height = 410f;
+        const float k_Height = 440f;
         const float k_TrackLeft = -52f;   // where the bars start (dp from the panel's centre)
         const float k_TrackWidth = 120f;
         const int k_Bars = 30;
@@ -29,7 +29,7 @@ namespace CardboardXR.Demos.Workspace
         AssistantSession m_Session;
         Image m_FpsFill, m_MemoryFill, m_BatteryFill;
         TextMeshProUGUI m_FpsText, m_MemoryText, m_BatteryText;
-        TextMeshProUGUI m_StateText, m_ModelText, m_VoiceText, m_UptimeText, m_NetText;
+        TextMeshProUGUI m_StateText, m_ModelText, m_VoiceText, m_UptimeText, m_NetText, m_NotesText;
         readonly List<Image> m_Spark = new();
         float m_Fps = 60f;
         float m_Next;
@@ -57,7 +57,7 @@ namespace CardboardXR.Demos.Workspace
             m_MemoryY = top - 92f;
             m_BatteryY = top - 122f;
             Row("FPS", m_FpsY, out m_FpsFill, out m_FpsText);
-            Row("PAMIĘĆ", m_MemoryY, out m_MemoryFill, out m_MemoryText);
+            Row("RAM", m_MemoryY, out m_MemoryFill, out m_MemoryText);
             Row("BATERIA", m_BatteryY, out m_BatteryFill, out m_BatteryText);
 
             Section("SIEĆ", top - 160f, null);
@@ -73,6 +73,7 @@ namespace CardboardXR.Demos.Workspace
             m_ModelText = Pair("MODEL", top - 318f);
             m_VoiceText = Pair("GŁOS", top - 344f);
             m_UptimeText = Pair("CZAS PRACY", top - 370f);
+            m_NotesText = Pair("NOTATKI", top - 396f);
             Refresh();
         }
 
@@ -191,7 +192,10 @@ namespace CardboardXR.Demos.Workspace
                 };
                 m_VoiceText.text = m_Session.Locale.ToUpperInvariant();
             }
-            m_ModelText.text = "CLAUDE OPUS 5.5";
+            string model = m_Session != null ? m_Session.ModelLabel.ToUpperInvariant() : "";
+            m_ModelText.text = model.Length > 22 ? model.Substring(0, 21) + "…" : model;
+            m_NotesText.text = m_Session == null ? "" : !m_Session.MemoryEnabled ? "WYŁĄCZONE"
+                : m_Session.Notes.Length == 0 ? "PUSTE" : $"{m_Session.Notes.Length} ZN.";
             var up = System.TimeSpan.FromSeconds(Time.realtimeSinceStartup);
             m_UptimeText.text = $"{(int)up.TotalHours:00}:{up.Minutes:00}:{up.Seconds:00}";
         }

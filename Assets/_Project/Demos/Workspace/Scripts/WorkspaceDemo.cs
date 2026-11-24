@@ -675,7 +675,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
                     screen.GetComponent<ChoiceList>() != null || screen.GetComponent<FileImport>() != null ||
-                    screen.GetComponent<GalleryView>() != null || screen.GetComponent<AssistantView>() != null ||
+                    screen.GetComponent<GalleryView>() != null || screen.GetComponent<AssistantView>() != null || screen.GetComponent<MemoryView>() != null ||
                     (screen.IsBrowser && screen.Browser.IsPrivate)) // a private window leaves no trace
                     continue;
                 saved.screens.Add(new SavedScreen
@@ -978,6 +978,79 @@ namespace CardboardXR.Demos.Workspace
                 CreateHologram(null);
         }
 
+        // The AI model, chosen from the list the key can use (the hologram's "Model" button, "zmień model")
+        public void OpenModelChooser()
+        {
+            if (m_Assistant == null)
+                return;
+            var screen = CreateNewScreen("Model " + AssistantSession.Name);
+            if (screen == null)
+                return;
+            var list = screen.gameObject.AddComponent<ChoiceList>();
+            list.Initialize(screen, $"Model {AssistantSession.Name}-a", new List<ChoiceList.Choice>(),
+                "Pobieram listę modeli dla Twojego klucza…", closeOnPick: false);
+            list.KeepAfterPick = true;
+
+            void Fill()
+            {
+                if (screen == null)
+                    return;
+                var choices = new List<ChoiceList.Choice>();
+                if (!m_Assistant.HasKey)
+                {
+                    choices.Add(new ChoiceList.Choice("Wklej klucz", m_Assistant.PasteKeyFromClipboard, "check"));
+                    list.SetChoices(choices, "Brak klucza API. Skopiuj go (platform.claude.com/settings/keys) i naciśnij „Wklej klucz”.");
+                    return;
+                }
+                foreach (var info in m_Assistant.Models)
+                {
+                    string id = info.id;
+                    string label = string.IsNullOrEmpty(info.display_name) ? id : info.display_name;
+                    string shown = label.Length > 22 ? label.Substring(0, 21) + "…" : label;
+                    choices.Add(new ChoiceList.Choice(shown, () =>
+                    {
+                        m_Assistant.SetModel(id);
+                        ShowToast("Model: " + label);
+                    }, id == m_Assistant.Model ? "check" : null));
+                }
+                list.SetChoices(choices, "Klucz nie widzi żadnych modeli Claude.");
+                screen.SetTitle($"Model: {m_Assistant.ModelLabel}");
+            }
+
+            m_Assistant.Changed += Fill; // a pasted key, a chosen model
+            screen.Closed += _ => m_Assistant.Changed -= Fill;
+            if (!m_Assistant.HasKey)
+                Fill();
+            else
+                m_Assistant.FetchModels((models, error) =>
+                {
+                    if (screen == null)
+                        return;
+                    if (models == null)
+                        list.SetChoices(new List<ChoiceList.Choice>(), error);
+                    else
+                        Fill();
+                });
+        }
+
+        // What V.I.C.T.O.R. remembers (the hologram's "Pamięć" button, "pamięć")
+        public void OpenMemory()
+        {
+            if (m_Assistant == null)
+                return;
+            foreach (var existing in m_Screens)
+            {
+                if (existing != null && existing.GetComponent<MemoryView>() != null)
+                {
+                    SetActiveScreen(existing);
+                    return;
+                }
+            }
+            var screen = CreateNewScreen("Pamięć");
+            if (screen != null)
+                screen.gameObject.AddComponent<MemoryView>().Initialize(screen, m_Assistant);
+        }
+
         // "Na blat": the hologram stands on the surface looked at, a desk (15-95 cm below the eyes) or the floor
         void PlaceHologramOnDesk()
         {
@@ -1011,8 +1084,10 @@ namespace CardboardXR.Demos.Workspace
             m_Hologram = hologram;
             hologram.Closed += h => { if (m_Hologram == h) m_Hologram = null; };
             hologram.PlaceRequested += _ => PlaceHologramOnDesk();
+            hologram.ModelRequested += _ => OpenModelChooser();
+            hologram.MemoryRequested += _ => OpenMemory();
             if (at == null)
-                ShowToast("Hologram: „Zapytaj” albo powiedz „Jarvis, …”. Uszczypnij go, aby przenieść");
+                ShowToast("V.I.C.T.O.R.: „Zapytaj” albo powiedz „Victor, …”. Uszczypnij go, aby przenieść");
         }
 
         // ---- Board games on the table ----
@@ -1405,7 +1480,8 @@ namespace CardboardXR.Demos.Workspace
             // answer comes from it, else the assistant's window opens.
             // "hologram na blat": it stands on the desk looked at (and is made first if it isn't out yet)
             if (Array.IndexOf(new[] { "hologram na blat", "hologram na biurko", "hologram na stół", "jarvis na blat", "jarvis na biurko",
-                    "jarvis na stół" }, command) >= 0)
+                    "jarvis na stół", "victor na blat", "victor na biurko", "victor na stół", "wiktor na blat", "wiktor na biurko",
+                    "wiktor na stół", "viktor na blat", "viktor na biurko", "viktor na stół" }, command) >= 0)
             {
                 if (m_Hologram == null)
                     ToggleHologram();
@@ -1414,7 +1490,8 @@ namespace CardboardXR.Demos.Workspace
                 return true;
             }
             string phrase = command.Replace(",", "");
-            foreach (var prefix in new[] { "zapytaj ", "jarvis ", "asystencie ", "asystent ", "hej claude ", "claude " })
+            foreach (var prefix in new[] { "zapytaj ", "victor ", "wiktor ", "viktor ", "hej victor ", "hej wiktor ", "jarvis ", "asystencie ",
+                         "asystent ", "hej claude ", "claude " })
             {
                 if (phrase.StartsWith(prefix, StringComparison.Ordinal) && phrase.Length > prefix.Length + 2)
                 {
@@ -1498,7 +1575,28 @@ namespace CardboardXR.Demos.Workspace
                 case "asystent": case "asystent ai": case "claude": case "assistant":
                     OpenAssistant();
                     break;
-                case "jarvis": case "hologram": case "pokaż hologram":
+                case "zmień model": case "wybierz model": case "model ai": case "który model": case "change model":
+                    OpenModelChooser();
+                    break;
+                case "pamięć": case "pokaż pamięć": case "co pamiętasz": case "memory":
+                    OpenMemory();
+                    break;
+                case "zapomnij wszystko": case "wyczyść pamięć": case "forget everything":
+                    if (m_Assistant != null)
+                    {
+                        m_Assistant.ForgetEverything();
+                        ShowToast("Zapomniałem wszystko");
+                    }
+                    break;
+                case "nowa rozmowa": case "new conversation":
+                    if (m_Assistant != null)
+                        m_Assistant.NewConversation();
+                    break;
+                case "wklej klucz": case "paste key":
+                    if (m_Assistant != null)
+                        m_Assistant.PasteKeyFromClipboard();
+                    break;
+                case "victor": case "wiktor": case "viktor": case "jarvis": case "hologram": case "pokaż hologram":
                     if (m_Hologram == null)
                         ToggleHologram();
                     break;

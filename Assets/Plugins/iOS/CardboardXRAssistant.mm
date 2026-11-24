@@ -7,6 +7,7 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #import <AVFoundation/AVFoundation.h>
+#import <UIKit/UIKit.h>
 
 extern "C" void UnitySendMessage(const char* obj, const char* method, const char* msg);
 
@@ -114,4 +115,22 @@ extern "C" void CardboardXR_StopSpeaking(void)
     dispatch_async(dispatch_get_main_queue(), ^{
         [s_Synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
     });
+}
+
+// The clipboard, for pasting the API key (iOS 16+ asks the user to allow the paste, once, on the phone's
+// screen). The returned string is malloc'd: the C# marshaller frees it. Cleared after the key is kept.
+extern "C" char* CardboardXR_ClipboardText(void)
+{
+    __block NSString* text = nil;
+    void (^read)(void) = ^{ text = UIPasteboard.generalPasteboard.string; };
+    if (NSThread.isMainThread)
+        read();
+    else
+        dispatch_sync(dispatch_get_main_queue(), read);
+    return text.length > 0 ? strdup(text.UTF8String) : NULL;
+}
+
+extern "C" void CardboardXR_ClipboardClear(void)
+{
+    dispatch_async(dispatch_get_main_queue(), ^{ UIPasteboard.generalPasteboard.string = @""; });
 }

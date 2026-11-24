@@ -29,7 +29,7 @@ namespace CardboardXR.Demos.Workspace
     // panel (HologramHud); below it, the name and four buttons: stop, close, Zapytaj, Na blat.
     public class HologramAssistant : MonoBehaviour
     {
-        public const string DisplayName = "JARVIS";
+        public const string DisplayName = "V.I.C.T.O.R.";
 
         const float k_BaseRadius = 0.14f;  // m, the projector base
         const float k_Height = 0.27f;      // m, the globe's centre above the base
@@ -51,6 +51,8 @@ namespace CardboardXR.Demos.Workspace
         public Carryable Carry { get; private set; }
         public event Action<HologramAssistant> Closed;
         public event Action<HologramAssistant> PlaceRequested; // "Na blat": stand on the surface looked at
+        public event Action<HologramAssistant> ModelRequested;  // "Model": choose the AI model from the key's list
+        public event Action<HologramAssistant> MemoryRequested; // "Pamięć": what V.I.C.T.O.R. remembers
 
         // The status panel beside the figure ("pokaż hud" / "ukryj hud")
         public bool HudVisible
@@ -705,15 +707,17 @@ namespace CardboardXR.Demos.Workspace
         // The name and the buttons below the base, the subtitles above the globe (both turn to face you)
         void BuildPanels()
         {
-            m_Controls = WorldUi.Panel("Hologram Controls", transform, new Vector2(330f, 130f), 1.0f, new Color(0f, 0f, 0f, 0f), 20f);
-            // Top row: stop, the name, close. Bottom row: Zapytaj, Na blat
-            var name = M3.Text("HologramName", m_Controls, DisplayName, M3Theme.Type.TitleLarge, new Vector2(0f, 30f), new Vector2(170f, 40f),
+            m_Controls = WorldUi.Panel("Hologram Controls", transform, new Vector2(330f, 190f), 1.0f, new Color(0f, 0f, 0f, 0f), 20f);
+            // Top row: stop, the name, close. Middle: Zapytaj, Na blat. Bottom: Model, Pamięć
+            var name = M3.Text("HologramName", m_Controls, DisplayName, M3Theme.Type.TitleLarge, new Vector2(0f, 64f), new Vector2(180f, 40f),
                 new Color(0.7f, 0.95f, 1f));
-            name.characterSpacing = 14f;
-            M3.IconButton("HologramStop", m_Controls, "stop", M3Button.Variant.Tonal, new Vector2(-122f, 30f), () => m_Session.StopSpeaking(), 56f);
-            M3.IconButton("HologramClose", m_Controls, "close", M3Button.Variant.Tonal, new Vector2(122f, 30f), Close, 56f);
-            M3.Button("HologramAsk", m_Controls, "Zapytaj", M3Button.Variant.Filled, new Vector2(-80f, -30f), () => m_Session.Listen(), "pinch", 150f);
-            M3.Button("HologramDesk", m_Controls, "Na blat", M3Button.Variant.Tonal, new Vector2(80f, -30f), () => PlaceRequested?.Invoke(this), "open_with", 150f);
+            name.characterSpacing = 6f;
+            M3.IconButton("HologramStop", m_Controls, "stop", M3Button.Variant.Tonal, new Vector2(-122f, 64f), () => m_Session.StopSpeaking(), 56f);
+            M3.IconButton("HologramClose", m_Controls, "close", M3Button.Variant.Tonal, new Vector2(122f, 64f), Close, 56f);
+            M3.Button("HologramAsk", m_Controls, "Zapytaj", M3Button.Variant.Filled, new Vector2(-80f, 4f), () => m_Session.Listen(), "pinch", 150f);
+            M3.Button("HologramDesk", m_Controls, "Na blat", M3Button.Variant.Tonal, new Vector2(80f, 4f), () => PlaceRequested?.Invoke(this), "open_with", 150f);
+            M3.Button("HologramModel", m_Controls, "Model", M3Button.Variant.Tonal, new Vector2(-80f, -56f), () => ModelRequested?.Invoke(this), "auto_awesome", 150f);
+            M3.Button("HologramMemory", m_Controls, "Pamięć", M3Button.Variant.Tonal, new Vector2(80f, -56f), () => MemoryRequested?.Invoke(this), "edit", 150f);
             WorkspaceSounds.Attach(m_Controls);
 
             m_Controls.localScale *= 0.7f; // smaller than a window's: it stands beside a 43 cm figure
@@ -979,7 +983,7 @@ namespace CardboardXR.Demos.Workspace
             toHead.y = 0f;
             toHead = toHead.sqrMagnitude > 1e-4f ? toHead.normalized : Vector3.back;
             // The buttons stand in front of the base (not on it), the subtitles above the globe
-            Face(m_Controls, transform.position + toHead * (k_BaseRadius * k_Scale + 0.17f) + Vector3.up * 0.07f);
+            Face(m_Controls, transform.position + toHead * (k_BaseRadius * k_Scale + 0.17f) + Vector3.up * 0.1f);
             // (above the dial: 2.45 globe radii round the globe's centre)
             Face(m_Subtitles, transform.position + Vector3.up * ((k_Height + k_Radius * 2.45f) * k_Scale + 0.06f));
             // The status panel to the user's left of the figure, at the globe's height
