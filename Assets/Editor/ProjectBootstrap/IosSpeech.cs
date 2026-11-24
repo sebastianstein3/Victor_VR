@@ -79,6 +79,7 @@ namespace ProjectBootstrap
             project.AddFrameworkToProject(framework, "Translation.framework", true);
             project.AddFrameworkToProject(framework, "UniformTypeIdentifiers.framework", false); // file picker (Pliki)
             project.AddFrameworkToProject(framework, "Photos.framework", false); // gallery and screenshots
+            project.AddFrameworkToProject(framework, "Security.framework", false); // assistant key in the Keychain
             if (string.IsNullOrEmpty(project.GetBuildPropertyForAnyConfig(framework, "SWIFT_VERSION")))
                 project.SetBuildProperty(framework, "SWIFT_VERSION", "5.0");
             project.WriteToFile(projectPath);

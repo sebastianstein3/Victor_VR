@@ -626,7 +626,7 @@ namespace CardboardXR.Demos.Workspace
             {
                 if (screen == null || screen.GetComponent<TutorialPanel>() != null || screen.GetComponent<AppPicker>() != null ||
                     screen.GetComponent<ChoiceList>() != null || screen.GetComponent<FileImport>() != null ||
-                    screen.GetComponent<GalleryView>() != null ||
+                    screen.GetComponent<GalleryView>() != null || screen.GetComponent<AssistantView>() != null ||
                     (screen.IsBrowser && screen.Browser.IsPrivate)) // a private window leaves no trace
                     continue;
                 saved.screens.Add(new SavedScreen
@@ -764,13 +764,14 @@ namespace CardboardXR.Demos.Workspace
             m_MoreScreen = screen;
             var choices = new List<ChoiceList.Choice>
             {
-                new(m_Captions != null && m_Captions.IsOn ? "Bez napisów" : "Napisy", ToggleCaptions),
+                new("Asystent", () => OpenAssistant()),
                 new("Galeria", OpenGallery),
-                new("Widżety", OpenWidgetMenu),
-                new("Układy", OpenLayouts),
-                new("Rysowanie", OpenDrawing),
-                new("Gry", OpenGames),
                 new("Filmy", OpenFilmPicker),
+                new("Widżety", OpenWidgetMenu),
+                new(m_Captions != null && m_Captions.IsOn ? "Bez napisów" : "Napisy", ToggleCaptions),
+                new("Układy", OpenLayouts),
+                new("Gry", OpenGames),
+                new("Rysowanie", OpenDrawing),
                 new("PDF", OpenPdfPicker),
                 new("Zdjęcia 3D", OpenSpatialPicker),
                 new("Środowisko", OpenEnvironmentPicker),
@@ -880,6 +881,26 @@ namespace CardboardXR.Demos.Workspace
                 }
             };
             ShowToast("Uszczypnij w powietrzu, aby rysować");
+        }
+
+        // ---- The AI assistant (one window) ----
+        public AssistantView OpenAssistant()
+        {
+            foreach (var existing in m_Screens)
+            {
+                var view = existing != null ? existing.GetComponent<AssistantView>() : null;
+                if (view != null)
+                {
+                    SetActiveScreen(existing);
+                    return view;
+                }
+            }
+            var screen = CreateNewScreen("Asystent AI");
+            if (screen == null)
+                return null;
+            var created = screen.gameObject.AddComponent<AssistantView>();
+            created.Initialize(screen, m_Voice);
+            return created;
         }
 
         // ---- Board games on the table ----
@@ -1222,6 +1243,14 @@ namespace CardboardXR.Demos.Workspace
             if (!VoiceDictation.IsMock && TryVoiceCommand(transcribedText))
                 return;
 
+            // The assistant's window is active: what was said is a question for it
+            var assistant = m_ActiveScreen != null ? m_ActiveScreen.GetComponent<AssistantView>() : null;
+            if (assistant != null && !VoiceDictation.IsMock)
+            {
+                assistant.Ask(transcribedText);
+                return;
+            }
+
             // Outside iOS nothing is recognized (a canned sentence comes back), so say so in the text.
             if (VoiceDictation.IsMock)
                 transcribedText = "[głos-demo] " + transcribedText;
@@ -1250,6 +1279,17 @@ namespace CardboardXR.Demos.Workspace
             string command = spoken.Trim().TrimEnd('.', '!', '?', ',').ToLowerInvariant();
             if (TryLayoutCommand(command))
                 return true;
+            // "zapytaj …", "asystencie …": a question for the assistant from anywhere
+            foreach (var prefix in new[] { "zapytaj ", "asystencie ", "asystent ", "hej claude ", "claude " })
+            {
+                if (command.StartsWith(prefix, StringComparison.Ordinal) && command.Length > prefix.Length + 2)
+                {
+                    var view = OpenAssistant();
+                    if (view != null)
+                        view.Ask(spoken.Trim().Substring(prefix.Length));
+                    return true;
+                }
+            }
             switch (command)
             {
                 case "nowy ekran": case "nowy monitor": case "new screen":
@@ -1312,6 +1352,9 @@ namespace CardboardXR.Demos.Workspace
                     break;
                 case "widżety": case "widgets":
                     OpenWidgetMenu();
+                    break;
+                case "asystent": case "asystent ai": case "claude": case "assistant":
+                    OpenAssistant();
                     break;
                 case "galeria": case "zdjęcia z telefonu": case "gallery": case "photos":
                     OpenGallery();
