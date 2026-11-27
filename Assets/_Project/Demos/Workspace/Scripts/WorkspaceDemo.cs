@@ -180,6 +180,7 @@ namespace CardboardXR.Demos.Workspace
             m_Assistant = gameObject.AddComponent<AssistantSession>();
             m_Assistant.Initialize(m_Voice);
             m_Assistant.Host = this;
+            InitControl();
             m_Captions = gameObject.AddComponent<LiveCaptions>();
             m_Captions.Initialize(transform, m_Core.Head, m_Voice);
             m_Environment = gameObject.AddComponent<EnvironmentSphere>();
@@ -273,6 +274,7 @@ namespace CardboardXR.Demos.Workspace
                 Destroy(m_ControlDock.gameObject);
 
             SetCinemaScreen(false);
+            ShutdownControl();
             if (m_Toast != null)
                 Destroy(m_Toast.gameObject);
 
@@ -320,6 +322,10 @@ namespace CardboardXR.Demos.Workspace
                 widths[i] = M3.ButtonWidth(labels[i], null);
                 total += widths[i];
             }
+            // Two round buttons at the end: carry the dock somewhere else, and hide it
+            const float round = M3.k_ButtonHeight;
+            float buttons = total;
+            total += 2f * (gap + round);
 
             m_ControlDock = WorldUi.Panel("Workspace Dock", transform, new Vector2(total + margin * 2f, M3.k_ButtonHeight + margin * 2f),
                 1.2f, M3Theme.SurfaceContainerHighest, 36f);
@@ -342,8 +348,31 @@ namespace CardboardXR.Demos.Workspace
             m_DeskBtn = Add(7, "DeskBtn", M3Button.Variant.Tonal, BeginDeskPlacement);
             Add(8, "RecenterBtn", M3Button.Variant.Tonal, RecenterAll);
             Add(9, "MoreBtn", M3Button.Variant.Text, OpenMore);
-
+            float grabX = -total / 2f + buttons + gap + round / 2f;
+            m_DockMovable = MovablePanel.Attach(m_ControlDock, m_Core.Head, "Dok", new Vector2(grabX, 0f),
+                new Vector2(grabX + gap + round, 0f), HideDock);
             WorkspaceSounds.Attach(m_ControlDock);
+            PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
+        }
+
+        MovablePanel m_DockMovable;
+
+        // Hides the dock ("pokaż dok" brings it back, "Wyśrodkuj" through the voice or the palm too)
+        void HideDock()
+        {
+            if (m_ControlDock == null)
+                return;
+            m_ControlDock.gameObject.SetActive(false);
+            ShowToast("Dok ukryty: powiedz „pokaż dok”");
+        }
+
+        void ShowDock()
+        {
+            if (m_ControlDock == null)
+                return;
+            m_ControlDock.gameObject.SetActive(true);
+            if (m_RoomAnchors != null)
+                m_RoomAnchors.Release(m_ControlDock);
             PlaceAround(m_ControlDock, 1.2f, 0f, k_DockPitch);
         }
 
@@ -1596,6 +1625,27 @@ namespace CardboardXR.Demos.Workspace
                     if (m_Assistant != null)
                         m_Assistant.NewConversation();
                     break;
+                case "pokaż dok": case "dok": case "pokaż panel": case "show dock":
+                    ShowDock();
+                    break;
+                case "ukryj dok": case "schowaj dok": case "ukryj panel": case "hide dock":
+                    HideDock();
+                    break;
+                case "powiększ obraz": case "obraz większy": case "przybliż obraz": case "zoom plus": case "większy obraz":
+                    SetPictureZoom(0.1f);
+                    break;
+                case "pomniejsz obraz": case "obraz mniejszy": case "oddal obraz": case "zoom minus": case "mniejszy obraz":
+                    SetPictureZoom(-0.1f);
+                    break;
+                case "obraz normalny": case "resetuj obraz": case "obraz domyślny":
+                    SetPictureZoom(float.NaN);
+                    break;
+                case "włącz wzrok": case "klik wzrokiem": case "włącz klik wzrokiem":
+                    GazeDwell = true;
+                    break;
+                case "wyłącz wzrok": case "wyłącz klik wzrokiem":
+                    GazeDwell = false;
+                    break;
                 case "odśwież mcp": case "połącz mcp": case "mcp": case "reload mcp":
                     if (m_Assistant != null)
                         m_Assistant.ReloadMcp();
@@ -1800,6 +1850,7 @@ namespace CardboardXR.Demos.Workspace
         const float k_CinemaDistance = 1.3f;
         static readonly Vector2 k_CinemaSize = new(720f, 405f);
         RectTransform m_CinemaPanel;
+        MovablePanel m_CinemaMovable;
         UnityEngine.UI.RawImage m_CinemaImage;
         TMPro.TextMeshProUGUI m_CinemaHint;
 
@@ -1823,6 +1874,10 @@ namespace CardboardXR.Demos.Workspace
                 M3Theme.Type.BodyLarge, Vector2.zero, new Vector2(600f, 40f), M3Theme.OnSurfaceVariant);
             // In front of where the user looks now (not a slot: it's for watching, not working)
             WorldUi.PlaceInFront(m_CinemaPanel, m_Core.Head, k_CinemaDistance, k_ScreenPitch, 0f);
+            // It can be carried and closed like a window (top right corner)
+            m_CinemaMovable = MovablePanel.Attach(m_CinemaPanel, m_Core.Head, "Ekran kinowy",
+                new Vector2(k_CinemaSize.x / 2f - 108f, k_CinemaSize.y / 2f - 40f), new Vector2(k_CinemaSize.x / 2f - 40f, k_CinemaSize.y / 2f - 40f),
+                () => { if (m_Cinema != null && m_Cinema.IsCinemaMode) ToggleCinemaMode(); else SetCinemaScreen(false); });
         }
 
         void UpdateCinemaScreen()
@@ -1902,6 +1957,15 @@ namespace CardboardXR.Demos.Workspace
         {
             if (m_GroupDrag && pose != HandPose.Fist)
                 SetGroupDrag(false);
+            // A fist with the gaze on a window, widget, the phone, the dock, the cinema screen or a model
+            // grabs it at once; opening the hand lets it go
+            if (pose == HandPose.Fist)
+            {
+                if (m_FistRelease == null)
+                    TryFistGrab();
+            }
+            else
+                ReleaseFist();
 
             m_HeldPose = pose;
             m_HeldPoseSince = Time.unscaledTime;
@@ -1925,7 +1989,9 @@ namespace CardboardXR.Demos.Workspace
             }
             else if (m_HeldPose == HandPose.Fist)
             {
-                SetGroupDrag(true);
+                // A fist on nothing carries the whole layout (on something it already grabbed that one)
+                if (m_FistRelease == null)
+                    SetGroupDrag(true);
             }
             else if (m_HeldPose == HandPose.OpenPalmForward)
             {
@@ -2070,6 +2136,7 @@ namespace CardboardXR.Demos.Workspace
             UpdateRoomAnchors();
             UpdateToast();
             UpdateConfirm();
+            UpdateControl();
             UpdateCinemaScreen();
 
             // 1. Physical Bluetooth Keyboard Input
@@ -2203,6 +2270,16 @@ namespace CardboardXR.Demos.Workspace
             if (m_PhoneScreen != null && m_PhoneScreen.IsDragging)
             {
                 m_PhoneScreen.StopDragging();
+                dropped = true;
+            }
+            if (m_DockMovable != null && m_DockMovable.IsDragging)
+            {
+                m_DockMovable.StopDragging();
+                dropped = true;
+            }
+            if (m_CinemaMovable != null && m_CinemaMovable.IsDragging)
+            {
+                m_CinemaMovable.StopDragging();
                 dropped = true;
             }
             foreach (var widget in m_Widgets)

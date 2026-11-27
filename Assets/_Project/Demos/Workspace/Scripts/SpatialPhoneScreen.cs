@@ -142,6 +142,12 @@ namespace CardboardXR.Demos.Workspace
 
         public event Action<SpatialPhoneScreen> Closed;
 
+        public void Close()
+        {
+            Closed?.Invoke(this);
+            Destroy(gameObject);
+        }
+
         public RectTransform Rect => m_CanvasRect;
         public bool IsDragging => m_IsDragging;
 
@@ -196,7 +202,7 @@ namespace CardboardXR.Demos.Workspace
 
             // Close button (top right)
             M3.IconButton("ClosePhone", m_CanvasRect, "close", M3Button.Variant.Text,
-                new Vector2(100f, topY - 10f), () => { Closed?.Invoke(this); Destroy(gameObject); }, 48f);
+                new Vector2(100f, topY - 10f), Close, 48f);
 
             // Bottom Grab Handle Bar
             float grabY = -(k_PhoneHeight / 2f) + 32f; // -248: the 56 dp button then ends 4 dp inside the panel

@@ -90,6 +90,43 @@ static void SendSpeech(NSString* message)
 
 static CXRSpeechDelegate* s_SpeechDelegate; // the synthesizer holds its delegate weakly
 
+// The answer must be heard whatever the app's audio session was left as: Unity's is "ambient", which the
+// phone's silent switch mutes (the phone is in goggles, nobody sees the switch), and the dictation puts the
+// session back to it when it ends, which is just before the answer arrives. Speech is "playback" (spoken
+// audio) that mixes with other sound; while the dictation still records (play-and-record) it is left alone.
+static void PrepareAudioForSpeech()
+{
+    AVAudioSession* session = [AVAudioSession sharedInstance];
+    NSError* error = nil;
+    if (![session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord])
+    {
+        [session setCategory:AVAudioSessionCategoryPlayback
+                        mode:AVAudioSessionModeSpokenAudio
+                     options:AVAudioSessionCategoryOptionMixWithOthers
+                       error:&error];
+    }
+    if (error == nil)
+        [session setActive:YES error:&error];
+    if (error != nil)
+        NSLog(@"[Assistant] audio session for speech: %@", error.localizedDescription);
+}
+
+// The best installed voice for the language (enhanced and premium voices sound far better than the compact one)
+static AVSpeechSynthesisVoice* BestVoice(NSString* language)
+{
+    AVSpeechSynthesisVoice* best = nil;
+    NSString* prefix = language.length >= 2 ? [language substringToIndex:2] : language;
+    for (AVSpeechSynthesisVoice* voice in [AVSpeechSynthesisVoice speechVoices])
+    {
+        if (![voice.language hasPrefix:prefix])
+            continue;
+        if (best == nil || voice.quality > best.quality ||
+            (voice.quality == best.quality && [voice.language isEqualToString:language] && ![best.language isEqualToString:language]))
+            best = voice;
+    }
+    return best ?: [AVSpeechSynthesisVoice voiceWithLanguage:language];
+}
+
 extern "C" void CardboardXR_Speak(const char* text, const char* language)
 {
     if (!text)
@@ -103,9 +140,14 @@ extern "C" void CardboardXR_Speak(const char* text, const char* language)
             s_SpeechDelegate = [CXRSpeechDelegate new];
             s_Synth.delegate = s_SpeechDelegate;
         }
+        PrepareAudioForSpeech();
         [s_Synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
         AVSpeechUtterance* utterance = [AVSpeechUtterance speechUtteranceWithString:words];
-        utterance.voice = [AVSpeechSynthesisVoice voiceWithLanguage:lang];
+        utterance.voice = BestVoice(lang);
+        utterance.volume = 1.0f;
+        NSLog(@"[Assistant] speaking %lu characters, voice %@ (%@), output %@", (unsigned long)words.length,
+              utterance.voice.name, utterance.voice.language,
+              [AVAudioSession sharedInstance].currentRoute.outputs.firstObject.portType ?: @"none");
         [s_Synth speakUtterance:utterance];
     });
 }

@@ -16,6 +16,10 @@ namespace CardboardXR.Demos.Workspace
         bool OpenUrl(string url);                  // a browser window (https only)
         void ShowNote(string text);                // a note widget with this text
         void Confirm(string question, Action<bool> answer); // asks the user; answer(false) when refused or unanswered
+        string ListWindows();                      // one line per open window, numbered
+        // window: a number from ListWindows, a part of a title or kind, or "aktywne"; action: close, bigger, smaller,
+        // center, front, left, right, up, down, closer, farther. Returns what was done, or why not.
+        string WindowAction(string window, string action);
     }
 
     public class ToolResult
@@ -73,6 +77,7 @@ namespace CardboardXR.Demos.Workspace
             "pokój", "modele", "galeria", "pliki", "rysuj", "warcaby", "chińczyk", "kółko i krzyżyk", "gry", "układy", "zrzut ekranu",
             "hologram na blat", "pokaż hud", "ukryj hud", "wyśrodkuj", "kino", "przeglądarka", "aplikacje", "więcej", "pomoc",
             "nowy ekran", "pamięć", "zmień model", "układ praca", "układ kino", "układ czytanie", "układ własny",
+            "pokaż dok", "ukryj dok", "powiększ obraz", "pomniejsz obraz", "włącz wzrok", "wyłącz wzrok",
         };
         static readonly HashSet<string> s_Disruptive = new() { "układ praca", "układ kino", "układ czytanie", "układ własny", "wyśrodkuj" };
 
@@ -207,6 +212,28 @@ namespace CardboardXR.Demos.Workspace
                 ConfirmText = input => s_Disruptive.Contains(MiniJson.GetString(input, "phrase") ?? "")
                     ? $"Wykonać „{MiniJson.GetString(input, "phrase")}”? Zmieni to okna wokół Ciebie." : null,
                 Run = WorkspaceCommand,
+            });
+            m_BuiltIn.Add(new AgentTool
+            {
+                Name = "windows_list",
+                Description = "List the windows, widgets and panels open around the user (numbered), with their kind. Use it before window_action when the user names a window.",
+                SchemaJson = "{\"type\":\"object\",\"properties\":{}}",
+                Activity = "sprawdzam okna",
+                Run = WindowsList,
+            });
+            m_BuiltIn.Add(new AgentTool
+            {
+                Name = "window_action",
+                Description = "Do something to one open window, widget or panel the user named: close it, make it bigger or smaller, bring it in front (make it the one " +
+                              "that typing and the trackpad go to), put it in front of the user (center), or move it left, right, up, down, closer or farther.",
+                SchemaJson = "{\"type\":\"object\",\"properties\":{\"window\":{\"type\":\"string\",\"description\":\"a number from windows_list, part of a title or kind, or 'aktywne'\"}," +
+                             "\"action\":{\"type\":\"string\",\"enum\":[\"close\",\"bigger\",\"smaller\",\"center\",\"front\",\"left\",\"right\",\"up\",\"down\",\"closer\",\"farther\"]}}," +
+                             "\"required\":[\"window\",\"action\"]}",
+                Activity = "zmieniam okno",
+                // Closing loses what is in the window: asked unless the user just said to close something
+                ConfirmText = input => MiniJson.GetString(input, "action") == "close" && !SaidClose()
+                    ? $"Zamknąć okno „{MiniJson.GetString(input, "window")}”?" : null,
+                Run = WindowActionTool,
             });
             m_BuiltIn.Add(new AgentTool
             {
@@ -436,6 +463,30 @@ namespace CardboardXR.Demos.Workspace
                 result.Fail("Nie udało się.");
             else
                 result.Output = "Zrobione.";
+            yield break;
+        }
+
+        bool SaidClose()
+        {
+            string said = LastUserText.ToLowerInvariant();
+            return said.Contains("zamknij") || said.Contains("zamknąć") || said.Contains("wyłącz") || said.Contains("usuń") || said.Contains("close") ||
+                   said.Contains("schowaj");
+        }
+
+        IEnumerator WindowsList(Dictionary<string, object> input, ToolResult result)
+        {
+            result.Output = m_Session.Host != null ? m_Session.Host.ListWindows() : "Brak okien.";
+            yield break;
+        }
+
+        IEnumerator WindowActionTool(Dictionary<string, object> input, ToolResult result)
+        {
+            string window = MiniJson.GetString(input, "window") ?? "", action = MiniJson.GetString(input, "action") ?? "";
+            string said = m_Session.Host != null ? m_Session.Host.WindowAction(window, action) : null;
+            if (said == null)
+                result.Fail("Nie udało się.");
+            else
+                result.Output = said;
             yield break;
         }
 

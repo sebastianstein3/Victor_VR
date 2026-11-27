@@ -48,7 +48,11 @@ namespace CardboardXR.Demos.Workspace
             "widzisz go przez kamerę, a obraz duży w VR.",
 
             "<b>Sterowanie</b>\n\n" +
-            "Klik: spójrz na przycisk i uszczypnij.\n" +
+            "Klik: spójrz na przycisk i <b>poczekaj sekundę</b> (wypełnia się kółko) albo uszczypnij. Wyłączenie: „wyłącz wzrok”.\n" +
+            "<b>Pięść</b> z wzrokiem na oknie, widżecie, telefonie, doku, ekranie kinowym lub modelu chwyta go, otwarta dłoń puszcza.\n" +
+            "Przeniesione przyciskiem „Chwyć” okno odkładasz, odwracając głowę tam, gdzie ma stać, i trzymając ją nieruchomo sekundę.\n" +
+            "Dok i ekran kinowy mają własny uchwyt i zamknięcie; dok wraca po „pokaż dok”.\n" +
+            "Czarne pola po bokach obrazu: „powiększ obraz” / „pomniejsz obraz”.\n" +
             "Kursor: gładzik biurkowy lub mysz Bluetooth; stuknięcie = klik, dwa palce = prawy klik.\n" +
             "Pisanie: klawiatura biurkowa, Bluetooth albo <b>Głos</b>.\n" +
             "Rozciąganie: uchwyt w prawym dolnym rogu, potem prowadź wzrokiem róg, uszczypnij = koniec.\n" +

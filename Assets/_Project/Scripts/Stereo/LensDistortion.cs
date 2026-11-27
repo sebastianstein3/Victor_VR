@@ -97,11 +97,21 @@ namespace CardboardXR.Stereo
         // A grid mesh that warps one eye's texture onto its part of the screen. Vertices are in
         // normalized device coordinates for the whole screen (-1..1, y up) and need no transform;
         // UVs index the eye texture.
-        public Mesh CreateDistortionMesh(Eye eye)
+        //
+        // zoom > 1 enlarges the picture about the lens's optical centre (the eye's own half of the screen
+        // is the limit): the black margin the viewer's field of view leaves around the picture shrinks and
+        // the picture's outer rim goes off the screen's edge. The mesh is cut at the middle of the screen
+        // so one eye's picture doesn't spill into the other's half.
+        public Mesh CreateDistortionMesh(Eye eye, float zoom = 1f)
         {
             const int n = MeshResolution;
             var vertices = new Vector3[n * n];
             var uvs = new Vector2[n * n];
+            CalculateViewports(eye, out var screen, out _);
+            var centre = new Vector2(2f * screen.xEyeOffset / screen.width - 1f, 2f * screen.yEyeOffset / screen.height - 1f);
+            var minX = eye == Eye.Left ? -1f : 0f;
+            var maxX = eye == Eye.Left ? 0f : 1f;
+            zoom = Mathf.Max(1f, zoom);
             for (var row = 0; row < n; row++)
             {
                 for (var col = 0; col < n; col++)
@@ -109,7 +119,9 @@ namespace CardboardXR.Stereo
                     var textureUv = new Vector2(col / (float)(n - 1), row / (float)(n - 1));
                     var screenUv = TextureUvToScreenUv(textureUv, eye);
                     var index = row * n + col;
-                    vertices[index] = new Vector3(2f * screenUv.x - 1f, 2f * screenUv.y - 1f, 0f);
+                    var ndc = new Vector2(2f * screenUv.x - 1f, 2f * screenUv.y - 1f);
+                    ndc = centre + (ndc - centre) * zoom;
+                    vertices[index] = new Vector3(Mathf.Clamp(ndc.x, minX, maxX), Mathf.Clamp(ndc.y, -1f, 1f), 0f);
                     uvs[index] = textureUv;
                 }
             }

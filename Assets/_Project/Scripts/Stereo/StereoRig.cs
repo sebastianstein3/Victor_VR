@@ -89,8 +89,54 @@ namespace CardboardXR.Stereo
             }
         }
 
+        // How much the picture is enlarged on the screen, 1 to 1.6: the viewer's lenses leave a black margin
+        // around each eye's picture, which a larger picture shrinks (at the cost of its outer rim). Kept
+        // between runs.
+        public const float k_MinZoom = 1f;
+        public const float k_MaxZoom = 1.6f;
+        const string k_ZoomPref = "CardboardXR.ScreenZoom";
+        const float k_DefaultZoom = 1.2f;
+        float m_Zoom = k_DefaultZoom;
+
+        public float Zoom
+        {
+            get => m_Zoom;
+            set
+            {
+                value = Mathf.Clamp(value, k_MinZoom, k_MaxZoom);
+                if (Mathf.Approximately(value, m_Zoom))
+                    return;
+                m_Zoom = value;
+                PlayerPrefs.SetFloat(k_ZoomPref, value);
+                ApplyZoom();
+            }
+        }
+
+        // The compositor's meshes again, for the zoom
+        void ApplyZoom()
+        {
+            if (m_Compositor == null || m_Lens == null)
+                return;
+            for (var i = 0; i < 2; i++)
+            {
+                var eye = (Eye)i;
+                var filter = m_Compositor.transform.Find($"{eye} Distortion Mesh")?.GetComponent<MeshFilter>();
+                if (filter == null)
+                    continue;
+                var mesh = m_Lens.CreateDistortionMesh(eye, m_Zoom);
+                mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 1e6f);
+                var old = m_Meshes[i];
+                filter.sharedMesh = mesh;
+                m_Meshes[i] = mesh;
+                if (old != null)
+                    Destroy(old);
+            }
+        }
+
         void OnEnable()
         {
+            m_Zoom = Mathf.Clamp(LaunchOptions.GetInt("zoom", Mathf.RoundToInt(PlayerPrefs.GetFloat(k_ZoomPref, k_DefaultZoom) * 100f)) / 100f,
+                k_MinZoom, k_MaxZoom);
             var frameRate = LaunchOptions.GetInt("fps", m_TargetFrameRate);
             Application.targetFrameRate = frameRate;
             // Both cost fill rate and bandwidth, which is heat: they're launch options so a run can be
@@ -260,7 +306,7 @@ namespace CardboardXR.Stereo
             for (var i = 0; i < 2; i++)
             {
                 var eye = (Eye)i;
-                m_Meshes[i] = m_Lens.CreateDistortionMesh(eye);
+                m_Meshes[i] = m_Lens.CreateDistortionMesh(eye, m_Zoom);
                 m_Materials[i] = new Material(m_DistortionShader)
                 {
                     name = $"{eye} Distortion",

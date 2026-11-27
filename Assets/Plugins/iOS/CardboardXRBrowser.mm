@@ -41,6 +41,58 @@ static NSArray<NSString*>* TrackerHosts()
              @"openx.net", @"casalemedia.com", @"smartadserver.com", @"gemius.pl", @"adocean.pl"];
 }
 
+
+// A video's picture is a separate hardware layer that WebKit leaves out of the snapshot the page is drawn
+// from (sound plays, the picture stays empty: YouTube). This script copies the playing video's frames onto
+// a canvas laid over the video, which is part of the page and so is captured. Without DRM (a protected
+// stream has no readable picture) it works for any <video>. Frames are copied ~15 times a second, at most
+// 854 px wide, and only for a video that is playing in view. The canvas goes next to the video, so the
+// player's own buttons stay above it; when that can't be, it is laid over the page.
+static NSString* VideoMirrorScript()
+{
+    return @R"JS((function () {
+  if (window.__cxrVideoMirror) return;
+  window.__cxrVideoMirror = true;
+  var mirrors = new WeakMap();
+  var last = 0;
+  function place(v, m, r) {
+    var p = v.parentNode;
+    if (p && p.nodeType === 1 && v.offsetParent) {
+      if (m.parentNode !== p) p.insertBefore(m, v.nextSibling);
+      var z = parseInt(getComputedStyle(v).zIndex, 10);
+      m.style.cssText = 'position:absolute;pointer-events:none;display:block;left:' + v.offsetLeft + 'px;top:' + v.offsetTop +
+        'px;width:' + v.offsetWidth + 'px;height:' + v.offsetHeight + 'px;z-index:' + ((isNaN(z) ? 0 : z) + 1);
+    } else {
+      if (m.parentNode !== document.documentElement) document.documentElement.appendChild(m);
+      m.style.cssText = 'position:fixed;pointer-events:none;display:block;z-index:2147483646;left:' + r.left + 'px;top:' + r.top +
+        'px;width:' + r.width + 'px;height:' + r.height + 'px';
+    }
+  }
+  function tick(now) {
+    requestAnimationFrame(tick);
+    if (now - last < 66) return;
+    last = now;
+    var list = document.getElementsByTagName('video');
+    for (var i = 0; i < list.length; i++) {
+      var v = list[i], m = mirrors.get(v), r = v.getBoundingClientRect();
+      var ok = v.videoWidth > 0 && v.readyState >= 2 && r.width > 60 && r.height > 40 && r.bottom > 0 && r.right > 0 &&
+        r.top < innerHeight && r.left < innerWidth;
+      if (!ok) { if (m) m.style.display = 'none'; continue; }
+      if (!m) {
+        m = document.createElement('canvas');
+        m.setAttribute('aria-hidden', 'true');
+        mirrors.set(v, m);
+      }
+      place(v, m, r);
+      var w = Math.min(854, Math.max(2, Math.round(r.width))), h = Math.max(2, Math.round(w * r.height / r.width));
+      if (m.width !== w || m.height !== h) { m.width = w; m.height = h; }
+      try { m.getContext('2d').drawImage(v, 0, 0, w, h); } catch (e) { m.style.display = 'none'; }
+    }
+  }
+  requestAnimationFrame(tick);
+})();)JS";
+}
+
 static WKContentRuleList* s_RuleList;
 static BOOL s_RulesCompiling;
 
@@ -310,6 +362,9 @@ extern "C" int CardboardXR_BrowserCreate(int width, int height, int privateMode)
     configuration.websiteDataStore = privateMode ? WKWebsiteDataStore.nonPersistentDataStore : WKWebsiteDataStore.defaultDataStore;
     if (s_RuleList != nil)
         [configuration.userContentController addContentRuleList:s_RuleList];
+    // Playing video is copied onto the page (see VideoMirrorScript); in every frame, since players are often embedded
+    [configuration.userContentController addUserScript:[[WKUserScript alloc] initWithSource:VideoMirrorScript()
+        injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:NO]];
 
     // Points such that the page is laid out like on a wide phone; the texture has 2 px per point
     CGRect frame = CGRectMake(0, 0, width / 2.0, height / 2.0);
